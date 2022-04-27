@@ -5,26 +5,31 @@ import "github.com/cespare/xxhash/v2"
 const bucketCount = 256
 const minBucketCap = 64 * 1024
 
+const MinCapacity = bucketCount * minBucketCap
+
 type Cache struct {
 	cap     int
 	buckets [bucketCount]bucket
 }
 
 func New(capacity int) *Cache {
-	minCap := minBucketCap * bucketCount
+	c := &Cache{}
+	c.Reset(capacity)
+	return c
+}
 
-	if capacity < minCap {
-		capacity = minCap
+func (c *Cache) Capacity() int { return c.cap }
+
+func (c *Cache) Reset(capacity int) {
+	if capacity < MinCapacity {
+		capacity = MinCapacity
 	}
-
-	var c Cache
 
 	bktCap := capacity / bucketCount
 	c.cap = bktCap * bucketCount
 	for i := 0; i < bucketCount; i++ {
 		c.buckets[i].Reset(bktCap)
 	}
-	return &c
 }
 
 func (c *Cache) Set(key, val []byte) error {
@@ -33,8 +38,24 @@ func (c *Cache) Set(key, val []byte) error {
 	return c.buckets[index].Set(key, keyHash, val)
 }
 
-func (c *Cache) Get(key []byte) ([]byte, bool) {
+func (c *Cache) Del(key []byte) bool {
 	keyHash := xxhash.Sum64(key)
 	index := keyHash % bucketCount
-	return c.buckets[index].Get(key, keyHash)
+	return c.buckets[index].Del(key, keyHash)
+}
+
+func (c *Cache) Get(key []byte) (val []byte, ok bool) {
+	ok = c.GetEx(key, func(_val []byte) {
+		val = append(val, _val...)
+	}, false)
+	return
+}
+func (c *Cache) Has(key []byte) bool {
+	return c.GetEx(key, nil, false)
+}
+
+func (c *Cache) GetEx(key []byte, fn func(val []byte), peek bool) bool {
+	keyHash := xxhash.Sum64(key)
+	index := keyHash % bucketCount
+	return c.buckets[index].Get(key, keyHash, fn, peek)
 }

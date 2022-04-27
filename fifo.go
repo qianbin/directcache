@@ -35,12 +35,9 @@ func (f *fifo) Size() int {
 	}
 }
 
-// View returns the reference of the inner data buffer at the given offset.
-func (f *fifo) View(offset int) []byte {
-	if l := len(f.data); l > 0 {
-		return f.data[offset%l:]
-	}
-	return nil
+// Slice returns the slice of the inner data buffer at the given offset.
+func (f *fifo) Slice(offset int) []byte {
+	return f.data[offset:]
 }
 
 // Push pushes the data block to the back of the queue.
@@ -89,7 +86,7 @@ func (f *fifo) Pop(n int) ([]byte, bool) {
 	}
 
 	if f.front+n <= f.back {
-		s := f.data[f.front : f.front+n]
+		s := f.data[f.front:][:n]
 		f.front += n
 		if f.front == f.back {
 			f.front, f.back = 0, 0
@@ -99,7 +96,7 @@ func (f *fifo) Pop(n int) ([]byte, bool) {
 	}
 
 	if f.front+n <= len(f.data) {
-		s := f.data[f.front : f.front+n]
+		s := f.data[f.front:][:n]
 		f.front += n
 		if f.front == len(f.data) {
 			f.front = 0

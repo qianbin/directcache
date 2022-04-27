@@ -1,8 +1,12 @@
 package directcache
 
 import (
+	"errors"
 	"sync"
-	"unsafe"
+)
+
+var (
+	ErrEntryTooLarge = errors.New("entry too large")
 )
 
 type bucket struct {
@@ -20,84 +24,102 @@ func (b *bucket) Reset(capacity int) {
 }
 
 func (b *bucket) Set(key []byte, keyHash uint64, val []byte) error {
+	if len(key) > b.fifo.Cap() {
+		return ErrEntryTooLarge
+	}
+
+	keyHash &^= keyHashMask
+
 	b.Lock()
 	defer b.Unlock()
 
-	if ent, found := b.lookup(keyHash); found {
+	if offset, found := b.m[keyHash]; found {
+		ent := b.entryAt(offset)
 		if ent.Match(key) && ent.UpdateValue(val) {
 			return nil
 		}
-		ent.deleted = true
+		delete(b.m, keyHash)
+		ent.Header().AddFlag(deletedFlag)
 	}
 
-	size := headerSize + len(key) + len(val)
-	alignedSize := alignEntrySize(size)
-
-	newEnt, offset := b.allocEntry(alignedSize)
-	newEnt.keyHash = keyHash
-	newEnt.Assign(key, val, uint32(alignedSize-size))
+	newEnt, offset := b.allocEntry(headerSize + len(key) + len(val))
+	newEnt.Init(key, keyHash, val, 0)
 	b.m[keyHash] = offset
 	return nil
 }
 
-func (b *bucket) Get(key []byte, keyHash uint64) ([]byte, bool) {
+func (b *bucket) Del(key []byte, keyHash uint64) bool {
+	keyHash &^= keyHashMask
+
 	b.Lock()
 	defer b.Unlock()
 
-	ent, found := b.lookup(keyHash)
-	if !found {
-		return nil, false
+	if offset, found := b.m[keyHash]; found {
+		if ent := b.entryAt(offset); ent.Match(key) {
+			delete(b.m, keyHash)
+			ent.Header().AddFlag(deletedFlag)
+			return true
+		}
 	}
-
-	if !ent.Match(key) {
-		return nil, false
-	}
-
-	return append([]byte(nil), ent.Value()...), true
+	return false
 }
 
-func (b *bucket) lookup(keyHash uint64) (ent entry, found bool) {
-	offset, found := b.m[keyHash]
-	if found {
-		ent = b.entryAt(offset)
+func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) bool {
+	keyHash &^= keyHashMask
+
+	b.Lock()
+	defer b.Unlock()
+
+	if offset, found := b.m[keyHash]; found {
+		if ent := b.entryAt(offset); ent.Match(key) {
+			if !peek {
+				ent.Header().AddFlag(activeFlag)
+			}
+			if fn != nil {
+				fn(ent.Value())
+			}
+			return true
+		}
 	}
-	return
+	return false
 }
 
 func (b *bucket) entryAt(offset int) entry {
-	v := b.fifo.View(offset)
-	return entry{
-		(*header)(unsafe.Pointer(&v[0])),
-		v[headerSize:],
-	}
+	ent := entry(b.fifo.Slice(offset))
+	return ent[:ent.Header().EntrySize()]
 }
 
 func (b *bucket) allocEntry(size int) (entry, int) {
 	windCount := 0
 	for {
 		if offset, ok := b.fifo.Push(nil, size); ok {
-			return b.entryAt(offset), offset
+			return b.fifo.Slice(offset)[:size], offset
 		}
 
 		ent := b.entryAt(b.fifo.Front())
-
-		popped, ok := b.fifo.Pop(ent.Size())
+		popped, ok := b.fifo.Pop(len(ent))
 		if !ok {
-			panic("")
+			panic(errors.New("bucket.allocEntry: pop entry failed"))
 		}
 
-		if !ent.deleted {
-			keyHash := ent.keyHash
-			if windCount < 5 {
-				windCount++
-				if offset, ok := b.fifo.Push(popped, 0); ok {
-					b.m[keyHash] = offset
-				} else {
-					delete(b.m, keyHash)
-				}
-			} else {
-				delete(b.m, keyHash)
-			}
+		hdr := ent.Header()
+		keyHash := hdr.KeyHash()
+
+		if hdr.HasFlag(deletedFlag) {
+			continue
+		}
+
+		if windCount > 4 || !hdr.HasFlag(activeFlag) {
+			delete(b.m, keyHash)
+			continue
+		}
+
+		windCount++
+		hdr.RemoveFlag(activeFlag)
+		if offset, ok := b.fifo.Push(popped, 0); ok {
+			b.m[keyHash] = offset
+		} else {
+			delete(b.m, keyHash)
 		}
 	}
 }

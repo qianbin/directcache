@@ -24,7 +24,8 @@ func (b *bucket) Reset(capacity int) {
 }
 
 func (b *bucket) Set(key []byte, keyHash uint64, val []byte) error {
-	if len(key) > b.fifo.Cap() {
+	entrySize := calcEntrySize(len(key), len(val), 0)
+	if entrySize > b.fifo.Cap() {
 		return ErrEntryTooLarge
 	}
 
@@ -42,7 +43,7 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) error {
 		ent.Header().AddFlag(deletedFlag)
 	}
 
-	newEnt, offset := b.allocEntry(headerSize + len(key) + len(val))
+	newEnt, offset := b.allocEntry(entrySize)
 	newEnt.Init(key, keyHash, val, 0)
 	b.m[keyHash] = offset
 	return nil
@@ -86,7 +87,7 @@ func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool)
 
 func (b *bucket) entryAt(offset int) entry {
 	ent := entry(b.fifo.Slice(offset))
-	return ent[:ent.Header().EntrySize()]
+	return ent[:ent.Size()]
 }
 
 func (b *bucket) allocEntry(size int) (entry, int) {

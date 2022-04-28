@@ -2,10 +2,12 @@ package directcache
 
 import "github.com/cespare/xxhash/v2"
 
-const bucketCount = 256
-const minBucketCap = 64 * 1024
+const (
+	bucketCount  = 256
+	minBucketCap = 64 * 1024
 
-const MinCapacity = bucketCount * minBucketCap
+	MinCapacity = bucketCount * minBucketCap
+)
 
 type Cache struct {
 	cap     int
@@ -21,21 +23,21 @@ func New(capacity int) *Cache {
 func (c *Cache) Capacity() int { return c.cap }
 
 func (c *Cache) Reset(capacity int) {
-	if capacity < MinCapacity {
-		capacity = MinCapacity
+	bktCap := capacity / bucketCount
+	if bktCap < minBucketCap {
+		bktCap = minBucketCap
 	}
 
-	bktCap := capacity / bucketCount
 	c.cap = bktCap * bucketCount
 	for i := 0; i < bucketCount; i++ {
 		c.buckets[i].Reset(bktCap)
 	}
 }
 
-func (c *Cache) Set(key, val []byte) error {
+func (c *Cache) Set(key, val []byte) {
 	keyHash := xxhash.Sum64(key)
 	index := keyHash % bucketCount
-	return c.buckets[index].Set(key, keyHash, val)
+	c.buckets[index].Set(key, keyHash, val)
 }
 
 func (c *Cache) Del(key []byte) bool {

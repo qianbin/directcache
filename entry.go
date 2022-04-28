@@ -11,16 +11,7 @@ import (
 const (
 	deletedFlag = 1
 	activeFlag  = 2
-	compactFlag = 4
 )
-
-type header8 struct {
-	keyLen, valLen, spare uint8
-}
-
-type header32 struct {
-	keyLen, valLen, spare uint32
-}
 
 type entry []byte
 
@@ -28,27 +19,60 @@ func (e entry) HasFlag(flag uint8) bool { return e[0]&flag != 0 }
 func (e entry) AddFlag(flag uint8)      { e[0] |= flag }
 func (e entry) RemoveFlag(flag uint8)   { e[0] &^= flag }
 
-func (e entry) hdr() (hdrSize, keyLen, valLen, spare int) {
-	hdrPtr := unsafe.Pointer(&e[1])
-	if e.HasFlag(compactFlag) {
-		hdr := (*header8)(hdrPtr)
-		return 1 + int(unsafe.Sizeof(*hdr)), int(hdr.keyLen), int(hdr.valLen), int(hdr.spare)
+func (e entry) intAt(i int, width int) int {
+	switch width {
+	case 1:
+		return int(e[i])
+	case 2:
+		return int(*(*uint16)(unsafe.Pointer(&e[i])))
+	case 4:
+		return int(*(*uint32)(unsafe.Pointer(&e[i])))
+	default:
+		return int(*(*uint64)(unsafe.Pointer(&e[i])))
 	}
-	hdr := (*header32)(hdrPtr)
-	return 1 + int(unsafe.Sizeof(*hdr)), int(hdr.keyLen), int(hdr.valLen), int(hdr.spare)
+}
+
+func (e entry) setIntAt(i int, width int, n int) {
+	switch width {
+	case 1:
+		e[i] = byte(n)
+	case 2:
+		*(*uint16)(unsafe.Pointer(&e[i])) = uint16(n)
+	case 4:
+		*(*uint32)(unsafe.Pointer(&e[i])) = uint32(n)
+	default:
+		*(*uint64)(unsafe.Pointer(&e[i])) = uint64(n)
+	}
+}
+
+func (e entry) hdr() (hdrSize, keyLen, valLen, spare int) {
+	kw := 1 << (e[0] >> 6)
+	vw := 1 << ((e[0] >> 4) & byte(3))
+
+	hdrSize = 1 + kw + vw*2
+
+	keyLen = e.intAt(1, kw)
+	valLen = e.intAt(1+kw, vw)
+	spare = e.intAt(1+kw+vw, vw)
+	return
 }
 
 func (e entry) setHdr(keyLen, valLen, spare int) (hdrSize int) {
-	hdrPtr := unsafe.Pointer(&e[1])
-	if keyLen <= math.MaxUint8 && (valLen+spare) <= math.MaxUint8 {
-		e.AddFlag(compactFlag)
-		hdr := (*header8)(hdrPtr)
-		hdr.keyLen, hdr.valLen, hdr.spare = uint8(keyLen), uint8(valLen), uint8(spare)
-		return 1 + int(unsafe.Sizeof(*hdr))
-	}
-	hdr := (*header32)(hdrPtr)
-	hdr.keyLen, hdr.valLen, hdr.spare = uint32(keyLen), uint32(valLen), uint32(spare)
-	return 1 + int(unsafe.Sizeof(*hdr))
+	kw, km := width(keyLen)
+	vw, vm := width(valLen + spare)
+
+	hdrSize = 1 + kw + vw*2
+
+	e[0] &^= (uint8(3) << 6)
+	e[0] |= (km << 6)
+
+	e[0] &^= (uint8(3) << 4)
+	e[0] |= (vm << 4)
+
+	e.setIntAt(1, kw, keyLen)
+	e.setIntAt(1+kw, vw, valLen)
+	e.setIntAt(1+kw+vw, vw, spare)
+	return
 }
 
 func (e entry) Size() int {
@@ -56,7 +80,7 @@ func (e entry) Size() int {
 	return hdrSize + keyLen + valLen + spare
 }
 
-func (e entry) Init(key []byte, keyHash uint64, val []byte, spare int) {
+func (e entry) Init(key []byte, val []byte, spare int) {
 	e[0] = 0 // reset flags
 
 	keyLen, valLen := len(key), len(val)
@@ -94,11 +118,22 @@ func (e entry) UpdateValue(val []byte) bool {
 }
 
 func calcEntrySize(keyLen, valLen, spare int) int {
-	var hdrSize int
-	if keyLen <= math.MaxUint8 && (valLen+spare) <= math.MaxUint8 {
-		hdrSize = 1 + int(unsafe.Sizeof(header8{}))
-	} else {
-		hdrSize = 1 + int(unsafe.Sizeof(header32{}))
-	}
+	kw, _ := width(keyLen)
+	vw, _ := width(valLen + spare)
+
+	hdrSize := 1 + kw + vw*2
 	return hdrSize + keyLen + valLen + spare
+}
+
+func width(len int) (width int, mask byte) {
+	switch {
+	case len <= math.MaxUint8:
+		return 1, 0
+	case len <= math.MaxUint16:
+		return 2, 1
+	case int64(len) <= math.MaxUint32:
+		return 4, 2
+	default:
+		return 8, 3
+	}
 }

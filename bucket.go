@@ -5,10 +5,6 @@ import (
 	"sync"
 )
 
-var (
-	ErrEntryTooLarge = errors.New("entry too large")
-)
-
 type bucket struct {
 	m    map[uint64]int
 	fifo fifo
@@ -23,10 +19,10 @@ func (b *bucket) Reset(capacity int) {
 	b.fifo.Reset(capacity)
 }
 
-func (b *bucket) Set(key []byte, keyHash uint64, val []byte) error {
+func (b *bucket) Set(key []byte, keyHash uint64, val []byte) {
 	entrySize := calcEntrySize(len(key), len(val), 0)
 	if entrySize > b.fifo.Cap() {
-		return ErrEntryTooLarge
+		return
 	}
 
 	b.Lock()
@@ -35,16 +31,15 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) error {
 	if offset, found := b.m[keyHash]; found {
 		ent := b.entryAt(offset)
 		if ent.Match(key) && ent.UpdateValue(val) {
-			return nil
+			return
 		}
 		delete(b.m, keyHash)
 		ent.AddFlag(deletedFlag)
 	}
 
 	newEnt, offset := b.allocEntry(entrySize)
-	newEnt.Init(key, keyHash, val, 0)
+	newEnt.Init(key, val, 0)
 	b.m[keyHash] = offset
-	return nil
 }
 
 func (b *bucket) Del(key []byte, keyHash uint64) bool {

@@ -29,8 +29,6 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) error {
 		return ErrEntryTooLarge
 	}
 
-	keyHash &^= keyHashMask
-
 	b.Lock()
 	defer b.Unlock()
 
@@ -40,7 +38,7 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) error {
 			return nil
 		}
 		delete(b.m, keyHash)
-		ent.Header().AddFlag(deletedFlag)
+		ent.AddFlag(deletedFlag)
 	}
 
 	newEnt, offset := b.allocEntry(entrySize)
@@ -50,15 +48,13 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) error {
 }
 
 func (b *bucket) Del(key []byte, keyHash uint64) bool {
-	keyHash &^= keyHashMask
-
 	b.Lock()
 	defer b.Unlock()
 
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); ent.Match(key) {
 			delete(b.m, keyHash)
-			ent.Header().AddFlag(deletedFlag)
+			ent.AddFlag(deletedFlag)
 			return true
 		}
 	}
@@ -66,15 +62,13 @@ func (b *bucket) Del(key []byte, keyHash uint64) bool {
 }
 
 func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) bool {
-	keyHash &^= keyHashMask
-
 	b.Lock()
 	defer b.Unlock()
 
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); ent.Match(key) {
 			if !peek {
-				ent.Header().AddFlag(activeFlag)
+				ent.AddFlag(activeFlag)
 			}
 			if fn != nil {
 				fn(ent.Value())
@@ -103,20 +97,18 @@ func (b *bucket) allocEntry(size int) (entry, int) {
 			panic(errors.New("bucket.allocEntry: pop entry failed"))
 		}
 
-		hdr := ent.Header()
-		keyHash := hdr.KeyHash()
-
-		if hdr.HasFlag(deletedFlag) {
+		if ent.HasFlag(deletedFlag) {
 			continue
 		}
 
-		if windCount > 4 || !hdr.HasFlag(activeFlag) {
+		keyHash := ent.KeyHash()
+		if windCount > 4 || !ent.HasFlag(activeFlag) {
 			delete(b.m, keyHash)
 			continue
 		}
 
 		windCount++
-		hdr.RemoveFlag(activeFlag)
+		ent.RemoveFlag(activeFlag)
 		if offset, ok := b.fifo.Push(popped, 0); ok {
 			b.m[keyHash] = offset
 		} else {

@@ -5,46 +5,53 @@ import (
 	"sync"
 )
 
+// bucket indexes and holds entries.
 type bucket struct {
-	m    map[uint64]int
-	fifo fifo
-	sync.Mutex
+	m    map[uint64]int // maps key hash to offset
+	q    fifo           // the queue buffer stores entries
+	lock sync.Mutex
 }
 
+// Reset resets the bucket with new capacity.
+// It drops all entries.
 func (b *bucket) Reset(capacity int) {
-	b.Lock()
-	defer b.Unlock()
+	b.lock.Lock()
+	defer b.lock.Unlock()
 
 	b.m = make(map[uint64]int)
-	b.fifo.Reset(capacity)
+	b.q.Reset(capacity)
 }
 
-func (b *bucket) Set(key []byte, keyHash uint64, val []byte) {
-	entrySize := calcEntrySize(len(key), len(val), 0)
-	if entrySize > b.fifo.Cap() {
-		return
+// Set set val for key.
+// false returned and nonting changed if the new entry size exceeds the capacity of this bucket.
+func (b *bucket) Set(key []byte, keyHash uint64, val []byte) bool {
+	entrySize := entrySize(len(key), len(val), 0)
+	if entrySize > b.q.Cap() {
+		return false
 	}
 
-	b.Lock()
-	defer b.Unlock()
+	b.lock.Lock()
+	defer b.lock.Unlock()
 
 	if offset, found := b.m[keyHash]; found {
 		ent := b.entryAt(offset)
 		if ent.Match(key) && ent.UpdateValue(val) {
-			return
+			return true
 		}
-		delete(b.m, keyHash)
 		ent.AddFlag(deletedFlag)
 	}
 
 	newEnt, offset := b.allocEntry(entrySize)
 	newEnt.Init(key, val, 0)
 	b.m[keyHash] = offset
+	return true
 }
 
+// Del deletes the key.
+// false is returned if key does not exist.
 func (b *bucket) Del(key []byte, keyHash uint64) bool {
-	b.Lock()
-	defer b.Unlock()
+	b.lock.Lock()
+	defer b.lock.Unlock()
 
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); ent.Match(key) {
@@ -56,9 +63,13 @@ func (b *bucket) Del(key []byte, keyHash uint64) bool {
 	return false
 }
 
+// Get get the value for key.
+// false is returned if the key not found.
+// The value is returned to caller via fn, for zero-copy.
+// If peek is true, the entry will not be marked as active.
 func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) bool {
-	b.Lock()
-	defer b.Unlock()
+	b.lock.Lock()
+	defer b.lock.Unlock()
 
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); ent.Match(key) {
@@ -74,39 +85,52 @@ func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool)
 	return false
 }
 
+// entryAt creates an entry object at the offset of the queue buffer.
 func (b *bucket) entryAt(offset int) entry {
-	ent := entry(b.fifo.Slice(offset))
+	ent := entry(b.q.Slice(offset))
 	return ent[:ent.Size()]
 }
 
+// allocEntry allocs space on the queue buffer for the new entry.
+// If no enough space, entries will be evicted according to the active flag.
 func (b *bucket) allocEntry(size int) (entry, int) {
-	windCount := 0
+	pushCount := 0
 	for {
-		if offset, ok := b.fifo.Push(nil, size); ok {
-			return b.fifo.Slice(offset)[:size], offset
+		// have a try
+		if offset, ok := b.q.Push(nil, size); ok {
+			return b.q.Slice(offset)[:size], offset
 		}
 
-		ent := b.entryAt(b.fifo.Front())
-		popped, ok := b.fifo.Pop(len(ent))
+		// no space
+		// pop an entry at the front of the queue buffer
+		ent := b.entryAt(b.q.Front())
+		popped, ok := b.q.Pop(len(ent))
 		if !ok {
+			// will never go here if entry is correctly implemented
 			panic(errors.New("bucket.allocEntry: pop entry failed"))
 		}
 
+		// good, deleted entry
 		if ent.HasFlag(deletedFlag) {
 			continue
 		}
 
 		keyHash := ent.KeyHash()
-		if windCount > 4 || !ent.HasFlag(activeFlag) {
+		// pushed too many times or inactive entry, delete it
+		if pushCount > 4 || !ent.HasFlag(activeFlag) {
 			delete(b.m, keyHash)
 			continue
 		}
 
-		windCount++
+		// deactivate the entry
 		ent.RemoveFlag(activeFlag)
-		if offset, ok := b.fifo.Push(popped, 0); ok {
+		//  and repush
+		if offset, ok := b.q.Push(popped, 0); ok {
+			pushCount++
+			// update the offset
 			b.m[keyHash] = offset
 		} else {
+			// repush might fail since the queue buffer is no-split
 			delete(b.m, keyHash)
 		}
 	}

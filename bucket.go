@@ -65,8 +65,7 @@ func (b *bucket) Del(key []byte, keyHash uint64) bool {
 
 // Get get the value for key.
 // false is returned if the key not found.
-// The value is returned to caller via fn, for zero-copy.
-// If peek is true, the entry will not be marked as active.
+// If peek is true, the entry will not be marked as recently-used.
 func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) bool {
 	b.lock.Lock()
 	defer b.lock.Unlock()
@@ -74,7 +73,7 @@ func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool)
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); ent.Match(key) {
 			if !peek {
-				ent.AddFlag(activeFlag)
+				ent.AddFlag(recentlyUsedFlag)
 			}
 			if fn != nil {
 				fn(ent.Value())
@@ -92,7 +91,7 @@ func (b *bucket) entryAt(offset int) entry {
 }
 
 // allocEntry allocs space on the queue buffer for the new entry.
-// If no enough space, entries will be evicted according to the active flag.
+// Entries are evicted like LRU strategy if no enough space.
 func (b *bucket) allocEntry(size int) (entry, int) {
 	pushCount := 0
 	for {
@@ -116,22 +115,20 @@ func (b *bucket) allocEntry(size int) (entry, int) {
 		}
 
 		keyHash := ent.KeyHash()
-		// pushed too many times or inactive entry, delete it
-		if pushCount > 4 || !ent.HasFlag(activeFlag) {
+		// pushed too many times or entry not recently used, delete it
+		if pushCount > 4 || !ent.HasFlag(recentlyUsedFlag) {
 			delete(b.m, keyHash)
 			continue
 		}
 
-		// deactivate the entry
-		ent.RemoveFlag(activeFlag)
-		//  and repush
+		ent.RemoveFlag(recentlyUsedFlag)
+		//  and push back to the queue
 		if offset, ok := b.q.Push(popped, 0); ok {
 			pushCount++
 			// update the offset
 			b.m[keyHash] = offset
 		} else {
-			// repush might fail since the queue buffer is no-split
-			delete(b.m, keyHash)
+			panic("bucket.allocEntry: push entry failed")
 		}
 	}
 }

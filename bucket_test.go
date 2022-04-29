@@ -1,7 +1,7 @@
 package directcache
 
 import (
-	"strconv"
+	"math/rand"
 	"testing"
 
 	"github.com/cespare/xxhash/v2"
@@ -50,9 +50,9 @@ func TestBucket(t *testing.T) {
 	// buffer overflow
 	bkt.Reset(100)
 	for i := 0; i < 100; i++ {
-		k := k + strconv.Itoa(i)
-		v := v + strconv.Itoa(i)
-		assert.True(t, bkt.Set([]byte(k), xxhash.Sum64String(k), []byte(v)))
-		bkt.Get([]byte(k), xxhash.Sum64String(k), nil, false)
+		n := rand.Intn(bkt.q.Cap() / 2)
+		k := make([]byte, n)
+		rand.Read(k)
+		assert.True(t, bkt.Set(k, xxhash.Sum64(k), nil))
 	}
 }

@@ -1,63 +1,90 @@
+// Package directcache is a high performance GC-free cache library.
 package directcache
 
 import "github.com/cespare/xxhash/v2"
 
 const (
-	bucketCount  = 256
-	minBucketCap = 64 * 1024
-
-	MinCapacity = bucketCount * minBucketCap
+	// BucketCount is the count of buckets in a Cache instance.
+	BucketCount = 256
+	// MinCapacity is the minimum capacity in bytes of the Cache.
+	MinCapacity = 1024 * 1024
 )
 
+// Cache caches key-value entries of type []byte.
 type Cache struct {
+	buckets [BucketCount]bucket
 	cap     int
-	buckets [bucketCount]bucket
 }
 
+// New creates a new Cache instance with the given capacity in bytes.
+// The instance capacity will be set to MinCapacity at minimum.
 func New(capacity int) *Cache {
 	c := &Cache{}
 	c.Reset(capacity)
 	return c
 }
 
+// Capacity returns the cache capacity.
 func (c *Cache) Capacity() int { return c.cap }
 
+// Reset resets the cache with new capacity and drops all cached entries.
 func (c *Cache) Reset(capacity int) {
-	bktCap := capacity / bucketCount
-	if bktCap < minBucketCap {
-		bktCap = minBucketCap
+	if capacity < MinCapacity {
+		capacity = MinCapacity
 	}
-
-	c.cap = bktCap * bucketCount
-	for i := 0; i < bucketCount; i++ {
+	bktCap := capacity / BucketCount
+	for i := 0; i < BucketCount; i++ {
 		c.buckets[i].Reset(bktCap)
 	}
+	c.cap = capacity
 }
 
+// Set stores the (key, val) entry in the cache, and returns false on failure.
+// It always succeeds unless the size of the entry exceeds 1/BucketCount of the cache capacity.
+//
+// It's safe to modify contents of key and val after Set returns.
 func (c *Cache) Set(key, val []byte) bool {
 	keyHash := xxhash.Sum64(key)
-	index := keyHash % bucketCount
+	index := keyHash % BucketCount
 	return c.buckets[index].Set(key, keyHash, val)
 }
 
+// Del deletes the entry matching the given key from the cache.
+// false is returned if no entry matched.
+//
+// It's safe to modify contents of key after Del returns.
 func (c *Cache) Del(key []byte) bool {
 	keyHash := xxhash.Sum64(key)
-	index := keyHash % bucketCount
+	index := keyHash % BucketCount
 	return c.buckets[index].Del(key, keyHash)
 }
 
+// Get returns the value of the entry matching the given key.
+// It returns false if no matched entry.
+//
+// It's safe to modify contents of key after Get returns.
 func (c *Cache) Get(key []byte) (val []byte, ok bool) {
-	ok = c.GetEx(key, func(_val []byte) {
+	ok = c.AdvGet(key, func(_val []byte) {
 		val = append(val, _val...)
 	}, false)
 	return
 }
+
+// Has returns false if no entry matching the given key.
+//
+// It's safe to modify contents of key after Has returns.
 func (c *Cache) Has(key []byte) bool {
-	return c.GetEx(key, nil, false)
+	return c.AdvGet(key, nil, false)
 }
 
-func (c *Cache) GetEx(key []byte, fn func(val []byte), peek bool) bool {
+// AdvGet is the advanced version of Get. val is (zero-copy) accessed via fn callback.
+// It returns false if no entry matching the given key, and fn will not be called then.
+// If peek is true, the entry's recently-used flag is not updated.
+//
+// val is only valid inside fn and should never be modified.
+// It's safe to modify contents of key after AdvGet returns.
+func (c *Cache) AdvGet(key []byte, fn func(val []byte), peek bool) bool {
 	keyHash := xxhash.Sum64(key)
-	index := keyHash % bucketCount
+	index := keyHash % BucketCount
 	return c.buckets[index].Get(key, keyHash, fn, peek)
 }

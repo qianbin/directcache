@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	deletedFlag = 1 // the entry was deleted
-	activeFlag  = 2 // the entry is recently accessed
+	deletedFlag      = 1 // the entry was deleted
+	recentlyUsedFlag = 2 // the entry is recently accessed
 )
 
 // entry consists of header and body.

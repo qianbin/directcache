@@ -34,10 +34,10 @@ func (c *Cache) Reset(capacity int) {
 	}
 }
 
-func (c *Cache) Set(key, val []byte) {
+func (c *Cache) Set(key, val []byte) bool {
 	keyHash := xxhash.Sum64(key)
 	index := keyHash % bucketCount
-	c.buckets[index].Set(key, keyHash, val)
+	return c.buckets[index].Set(key, keyHash, val)
 }
 
 func (c *Cache) Del(key []byte) bool {

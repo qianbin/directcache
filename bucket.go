@@ -86,8 +86,7 @@ func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool)
 
 // entryAt creates an entry object at the offset of the queue buffer.
 func (b *bucket) entryAt(offset int) entry {
-	ent := entry(b.q.Slice(offset))
-	return ent[:ent.Size()]
+	return b.q.Slice(offset)
 }
 
 // allocEntry allocs space on the queue buffer for the new entry.
@@ -103,7 +102,7 @@ func (b *bucket) allocEntry(size int) (entry, int) {
 		// no space
 		// pop an entry at the front of the queue buffer
 		ent := b.entryAt(b.q.Front())
-		popped, ok := b.q.Pop(len(ent))
+		popped, ok := b.q.Pop(ent.Size())
 		if !ok {
 			// will never go here if entry is correctly implemented
 			panic(errors.New("bucket.allocEntry: pop entry failed"))

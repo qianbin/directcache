@@ -33,8 +33,9 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) (ok bool) {
 			if ent.Match(key) && ent.UpdateValue(val) {
 				ent.AddFlag(recentlyUsedFlag)
 				ok = true
+			} else {
+				ent.AddFlag(deletedFlag)
 			}
-			ent.AddFlag(deletedFlag)
 		}
 		if !ok {
 			newEnt, offset := b.allocEntry(entrySize)

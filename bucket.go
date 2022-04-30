@@ -9,7 +9,7 @@ import (
 type bucket struct {
 	m    map[uint64]int // maps key hash to offset
 	q    fifo           // the queue buffer stores entries
-	lock sync.Mutex
+	lock sync.RWMutex
 }
 
 // Reset resets the bucket with new capacity.
@@ -67,8 +67,8 @@ func (b *bucket) Del(key []byte, keyHash uint64) bool {
 // false is returned if the key not found.
 // If peek is true, the entry will not be marked as recently-used.
 func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) bool {
-	b.lock.Lock()
-	defer b.lock.Unlock()
+	b.lock.RLock()
+	defer b.lock.RUnlock()
 
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); ent.Match(key) {

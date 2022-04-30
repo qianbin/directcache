@@ -89,24 +89,28 @@ func TestCacheHitrate(t *testing.T) {
 	t.Logf("hits: %d misses: %d hitrate: %.2f%%", hit, miss, hitrate*100)
 }
 
-func BenchmarkCacheGetSet(b *testing.B) {
-	c := directcache.New(1024 * 1024 * 100)
+func BenchmarkCacheSetGet(b *testing.B) {
+	k := make([]byte, 8)
+	v := make([]byte, 8)
 
-	k := make([]byte, 32)
-	v := make([]byte, 64)
+	nEntries := 1000000
+	entrySize := len(k) + len(v) + 4
+	nBytes := entrySize * nEntries
+
+	c := directcache.New(nBytes * 2)
 
 	b.Run("set", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			binary.BigEndian.PutUint64(v, uint64(i))
-			binary.BigEndian.PutUint64(k, uint64(i))
+			j := i % nEntries
+			binary.BigEndian.PutUint64(k, uint64(j))
 			c.Set(k, v)
 		}
 	})
 	b.Run("get", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			binary.BigEndian.PutUint64(v, uint64(i))
-			binary.BigEndian.PutUint64(k, uint64(i))
-			c.Get(k)
+			j := i % nEntries
+			binary.BigEndian.PutUint64(k, uint64(j))
+			c.AdvGet(k, nil, false)
 		}
 	})
 }

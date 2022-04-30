@@ -16,60 +16,57 @@ type bucket struct {
 // It drops all entries.
 func (b *bucket) Reset(capacity int) {
 	b.lock.Lock()
-	defer b.lock.Unlock()
-
 	b.m = make(map[uint64]int)
 	b.q.Reset(capacity)
+	b.lock.Unlock()
 }
 
 // Set set val for key.
 // false returned and nonting changed if the new entry size exceeds the capacity of this bucket.
-func (b *bucket) Set(key []byte, keyHash uint64, val []byte) bool {
+func (b *bucket) Set(key []byte, keyHash uint64, val []byte) (ok bool) {
 	entrySize := entrySize(len(key), len(val), 0)
-	if entrySize > b.q.Cap() {
-		return false
-	}
 
 	b.lock.Lock()
-	defer b.lock.Unlock()
-
-	if offset, found := b.m[keyHash]; found {
-		ent := b.entryAt(offset)
-		if ent.Match(key) && ent.UpdateValue(val) {
-			return true
+	if entrySize <= b.q.Cap() {
+		if offset, found := b.m[keyHash]; found {
+			ent := b.entryAt(offset)
+			if ent.Match(key) && ent.UpdateValue(val) {
+				ent.AddFlag(recentlyUsedFlag)
+				ok = true
+			}
+			ent.AddFlag(deletedFlag)
 		}
-		ent.AddFlag(deletedFlag)
+		if !ok {
+			newEnt, offset := b.allocEntry(entrySize)
+			newEnt.Init(key, val, 0)
+			b.m[keyHash] = offset
+			ok = true
+		}
 	}
-
-	newEnt, offset := b.allocEntry(entrySize)
-	newEnt.Init(key, val, 0)
-	b.m[keyHash] = offset
-	return true
+	b.lock.Unlock()
+	return
 }
 
 // Del deletes the key.
 // false is returned if key does not exist.
-func (b *bucket) Del(key []byte, keyHash uint64) bool {
+func (b *bucket) Del(key []byte, keyHash uint64) (ok bool) {
 	b.lock.Lock()
-	defer b.lock.Unlock()
-
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); ent.Match(key) {
 			delete(b.m, keyHash)
 			ent.AddFlag(deletedFlag)
-			return true
+			ok = true
 		}
 	}
-	return false
+	b.lock.Unlock()
+	return
 }
 
 // Get get the value for key.
 // false is returned if the key not found.
 // If peek is true, the entry will not be marked as recently-used.
-func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) bool {
+func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) (ok bool) {
 	b.lock.RLock()
-	defer b.lock.RUnlock()
-
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); ent.Match(key) {
 			if !peek {
@@ -78,10 +75,11 @@ func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool)
 			if fn != nil {
 				fn(ent.Value())
 			}
-			return true
+			ok = true
 		}
 	}
-	return false
+	b.lock.RUnlock()
+	return
 }
 
 // entryAt creates an entry object at the offset of the queue buffer.

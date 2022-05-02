@@ -1,8 +1,11 @@
 package directcache
 
 import (
+	"bytes"
 	"errors"
 	"sync"
+
+	"github.com/cespare/xxhash/v2"
 )
 
 // bucket indexes and holds entries.
@@ -30,7 +33,7 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) (ok bool) {
 	if entrySize <= b.q.Cap() {
 		if offset, found := b.m[keyHash]; found {
 			ent := b.entryAt(offset)
-			if ent.Match(key) && ent.UpdateValue(val) {
+			if bytes.Equal(key, ent.Key()) && ent.UpdateValue(val) {
 				ent.AddFlag(recentlyUsedFlag)
 				ok = true
 			} else {
@@ -53,7 +56,7 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) (ok bool) {
 func (b *bucket) Del(key []byte, keyHash uint64) (ok bool) {
 	b.lock.Lock()
 	if offset, found := b.m[keyHash]; found {
-		if ent := b.entryAt(offset); ent.Match(key) {
+		if ent := b.entryAt(offset); bytes.Equal(ent.Key(), key) {
 			delete(b.m, keyHash)
 			ent.AddFlag(deletedFlag)
 			ok = true
@@ -69,7 +72,7 @@ func (b *bucket) Del(key []byte, keyHash uint64) (ok bool) {
 func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) (ok bool) {
 	b.lock.RLock()
 	if offset, found := b.m[keyHash]; found {
-		if ent := b.entryAt(offset); ent.Match(key) {
+		if ent := b.entryAt(offset); bytes.Equal(ent.Key(), key) {
 			if !peek {
 				ent.AddFlag(recentlyUsedFlag)
 			}
@@ -112,7 +115,7 @@ func (b *bucket) allocEntry(size int) (entry, int) {
 			continue
 		}
 
-		keyHash := ent.KeyHash()
+		keyHash := xxhash.Sum64(ent.Key())
 		// pushed too many times or entry not recently used, delete it
 		if pushCount > 4 || !ent.HasFlag(recentlyUsedFlag) {
 			delete(b.m, keyHash)

@@ -1,11 +1,8 @@
 package directcache
 
 import (
-	"bytes"
+	"encoding/binary"
 	"math"
-	"unsafe"
-
-	"github.com/cespare/xxhash/v2"
 )
 
 const (
@@ -16,152 +13,100 @@ const (
 // entry consists of header and body.
 type entry []byte
 
-// flag ops. flags are stored in the first 4-bit of the entry.
+// flag ops. flags are stored in the first 4 bits of e[0].
 func (e entry) HasFlag(flag uint8) bool { return e[0]&(flag<<4) != 0 }
 func (e entry) AddFlag(flag uint8)      { e[0] |= (flag << 4) }
 func (e entry) RemoveFlag(flag uint8)   { e[0] &^= (flag << 4) }
 
-// kvw extracts the width of key/val length.
-// kw and vw are stored in 5-8th bits of the entry.
-func (e entry) kvw() (kw int, vw int) {
-	b := e[0]
-	return 1 << ((b >> 2) & byte(3)), 1 << (b & byte(3))
-}
+// kv vw extracts the width of key/val length.
+// kw and vw are stored in the last 4 bits of e[0].
+func (e entry) kw() int { return 1 << ((e[0] >> 2) & 3) }
+func (e entry) vw() int { return 1 << (e[0] & 3) }
 
-func (e entry) hdrSize() int {
-	kw, vw := e.kvw()
-	return 1 + kw + vw*2
-}
-
-func (e entry) keyLen() int {
-	kw, _ := e.kvw()
-	return e.intAt(1, kw)
-}
-
-func (e entry) valLen() (int, int) {
-	kw, vw := e.kvw()
-	return e.intAt(1+kw, vw), e.intAt(1+kw+vw, vw)
-}
+func (e entry) hdrSize() int { return 1 + e.kw() + e.vw()*2 }
+func (e entry) keyLen() int  { return e.intAt(1, e.kw()) }
+func (e entry) valLen() int  { return e.intAt(1+e.kw(), e.vw()) }
+func (e entry) spare() int   { return e.intAt(1+e.kw()+e.vw(), e.vw()) }
 
 // Size returns the entry size.
-func (e entry) Size() int {
-	valLen, spare := e.valLen()
-	return e.hdrSize() + e.keyLen() + valLen + spare
-}
+func (e entry) Size() int { return e.hdrSize() + e.keyLen() + e.valLen() + e.spare() }
+
+// Key returns the key of the entry.
+func (e entry) Key() []byte { return e[e.hdrSize():][:e.keyLen()] }
+
+// Value returns the value of the entry.
+func (e entry) Value() []byte { return e[e.hdrSize():][e.keyLen():][:e.valLen()] }
 
 // Init initializes the entry with key, val and spare.
 //
 // The entry must be pre-alloced.
 func (e entry) Init(key []byte, val []byte, spare int) {
-	e[0] = 0 // reset flags
-
 	keyLen, valLen := len(key), len(val)
+	kb, vb := bitw(keyLen), bitw(valLen+spare)
 
-	kw, km := width(keyLen)
-	vw, vm := width(valLen + spare)
-
-	// pack the width of key length
-	e[0] &^= (uint8(3) << 2)
-	e[0] |= (km << 2)
-
-	// pack the width of value length
-	e[0] &^= uint8(3)
-	e[0] |= vm
-
+	// init header
+	e[0] = (kb << 2) | vb
+	kw, vw := 1<<kb, 1<<vb
 	e.setIntAt(1, kw, keyLen)
 	e.setIntAt(1+kw, vw, valLen)
 	e.setIntAt(1+kw+vw, vw, spare)
 
+	// init key and value
 	hdrSize := 1 + kw + vw*2
-
 	copy(e[hdrSize:], key)
 	copy(e[hdrSize:][keyLen:], val)
-}
-
-// Match tests if the key matched.
-func (e entry) Match(key []byte) bool {
-	if keyLen := len(key); keyLen == e.keyLen() {
-		return bytes.Equal(key, e[e.hdrSize():][:keyLen])
-	}
-	return false
-}
-
-// KeyHash calculates the hash of the key.
-func (e entry) KeyHash() uint64 {
-	return xxhash.Sum64(e[e.hdrSize():][:e.keyLen()])
-}
-
-// Value returns the value stored in the entry.
-func (e entry) Value() []byte {
-	valLen, _ := e.valLen()
-	return e[e.hdrSize():][e.keyLen():][:valLen]
 }
 
 // UpdateValue updates the value.
 //
 // It fails if no enough space.
 func (e entry) UpdateValue(val []byte) bool {
-	valLen, spare := e.valLen()
-	newValLen := len(val)
-	if cap := valLen + spare; cap >= newValLen {
-		keyLen := e.keyLen()
-		copy(e[e.hdrSize():][keyLen:], val)
-
-		kw, vw := e.kvw()
-		e.setIntAt(1+kw, vw, newValLen)
-		e.setIntAt(1+kw+vw, vw, cap-newValLen)
+	cap := e.valLen() + e.spare()
+	if nvl := len(val); nvl <= cap {
+		e.setIntAt(1+e.kw(), e.vw(), nvl)            // new value len
+		e.setIntAt(1+e.kw()+e.vw(), e.vw(), cap-nvl) // new spare
+		copy(e[e.hdrSize():][e.keyLen():], val)
 		return true
 	}
 	return false
 }
 
-func (e entry) intAt(i int, width int) int {
-	switch width {
+func (e entry) intAt(i int, w int) int {
+	switch w {
 	case 1:
 		return int(e[i])
 	case 2:
-		return int(*(*uint16)(unsafe.Pointer(&e[i])))
-	case 4:
-		return int(*(*uint32)(unsafe.Pointer(&e[i])))
+		return int(binary.BigEndian.Uint16(e[i:]))
 	default:
-		return int(*(*uint64)(unsafe.Pointer(&e[i])))
+		return int(binary.BigEndian.Uint32(e[i:]))
 	}
 }
 
-func (e entry) setIntAt(i int, width int, n int) {
-	switch width {
+func (e entry) setIntAt(i int, w int, n int) {
+	switch w {
 	case 1:
 		e[i] = byte(n)
 	case 2:
-		*(*uint16)(unsafe.Pointer(&e[i])) = uint16(n)
-	case 4:
-		*(*uint32)(unsafe.Pointer(&e[i])) = uint32(n)
+		binary.BigEndian.PutUint16(e[i:], uint16(n))
 	default:
-		*(*uint64)(unsafe.Pointer(&e[i])) = uint64(n)
+		binary.BigEndian.PutUint32(e[i:], uint32(n))
 	}
 }
 
 // entrySize returns the size of an entry for given kv lengths.
 func entrySize(keyLen, valLen, spare int) int {
-	kw, _ := width(keyLen)
-	vw, _ := width(valLen + spare)
-
-	hdrSize := 1 + kw + vw*2
-	return hdrSize + keyLen + valLen + spare
+	return 1 + (1 << bitw(keyLen)) + (2 << bitw(valLen+spare)) + // hdr
+		keyLen + valLen + spare //body
 }
 
-// width returns how many bytes needed to store len.
-//
-// mask is the bit mask for needed number of bytes.
-func width(len int) (width int, mask byte) {
+// bitw where 1<<bitw is how many bytes needed to present n.
+func bitw(n int) byte {
 	switch {
-	case len <= math.MaxUint8:
-		return 1, 0
-	case len <= math.MaxUint16:
-		return 2, 1
-	case int64(len) <= math.MaxUint32: // cast to int64 to avoid compile error on 32-bit env
-		return 4, 2
+	case n <= math.MaxUint8:
+		return 0
+	case n <= math.MaxUint16:
+		return 1
 	default:
-		return 8, 3
+		return 2
 	}
 }

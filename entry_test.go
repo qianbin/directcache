@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestEntry(t *testing.T) {
+func Test_entry(t *testing.T) {
 	t.Run("kv", func(t *testing.T) {
 		key := "foo"
 		val := "bar"
@@ -15,24 +15,103 @@ func TestEntry(t *testing.T) {
 		ent := make(entry, entrySize(len(key), len(val), len(val)))
 		ent.Init([]byte(key), []byte(val), len(val))
 
-		assert.True(t, ent.Match([]byte(key)))
-		assert.Equal(t, val, string(ent.Value()))
+		require.Equal(t, entrySize(len(key), len(val), len(val)), ent.Size())
+		require.Equal(t, key, string(ent.Key()))
+		require.Equal(t, val, string(ent.Value()))
 
-		assert.True(t, ent.UpdateValue([]byte(val+val)), "has spare space, should ok")
-		assert.Equal(t, val+val, string(ent.Value()), "should be the updated value")
+		require.True(t, ent.UpdateValue([]byte(val+val)), "has spare space, should ok")
+		require.Equal(t, val+val, string(ent.Value()), "should be the updated value")
 
-		assert.False(t, ent.UpdateValue([]byte(val+val+val)), "no space, should fail")
+		require.False(t, ent.UpdateValue([]byte(val+val+val)), "no space, should fail")
+		require.Equal(t, val+val, string(ent.Value()), "should be the previous value")
 	})
 
-	t.Run("bigkv", func(t *testing.T) {
-		key := strings.Repeat("s", 300)
-		val := strings.Repeat("v", 65536)
+	t.Run("k8v16", func(t *testing.T) {
+		key := strings.Repeat("s", 10)
+		val := strings.Repeat("v", 1000)
 
 		ent := make(entry, entrySize(len(key), len(val), 0))
 		ent.Init([]byte(key), []byte(val), 0)
 
-		assert.True(t, ent.Match([]byte(key)))
-		assert.Equal(t, val, string(ent.Value()))
+		require.Equal(t, key, string(ent.Key()))
+		require.Equal(t, val, string(ent.Value()))
+	})
+
+	t.Run("k8v32", func(t *testing.T) {
+		key := strings.Repeat("s", 10)
+		val := strings.Repeat("v", 70000)
+
+		ent := make(entry, entrySize(len(key), len(val), 0))
+		ent.Init([]byte(key), []byte(val), 0)
+
+		require.Equal(t, key, string(ent.Key()))
+		require.Equal(t, val, string(ent.Value()))
+	})
+
+	t.Run("k16v8", func(t *testing.T) {
+		key := strings.Repeat("s", 1000)
+		val := strings.Repeat("v", 10)
+
+		ent := make(entry, entrySize(len(key), len(val), 0))
+		ent.Init([]byte(key), []byte(val), 0)
+
+		require.Equal(t, key, string(ent.Key()))
+		require.Equal(t, val, string(ent.Value()))
+	})
+
+	t.Run("k16v16", func(t *testing.T) {
+		key := strings.Repeat("s", 1000)
+		val := strings.Repeat("v", 1000)
+
+		ent := make(entry, entrySize(len(key), len(val), 0))
+		ent.Init([]byte(key), []byte(val), 0)
+
+		require.Equal(t, key, string(ent.Key()))
+		require.Equal(t, val, string(ent.Value()))
+	})
+
+	t.Run("k16v32", func(t *testing.T) {
+		key := strings.Repeat("s", 1000)
+		val := strings.Repeat("v", 70000)
+
+		ent := make(entry, entrySize(len(key), len(val), 0))
+		ent.Init([]byte(key), []byte(val), 0)
+
+		require.Equal(t, key, string(ent.Key()))
+		require.Equal(t, val, string(ent.Value()))
+	})
+
+	t.Run("k32v8", func(t *testing.T) {
+		key := strings.Repeat("s", 70000)
+		val := strings.Repeat("v", 10)
+
+		ent := make(entry, entrySize(len(key), len(val), 0))
+		ent.Init([]byte(key), []byte(val), 0)
+
+		require.Equal(t, key, string(ent.Key()))
+		require.Equal(t, val, string(ent.Value()))
+	})
+
+	t.Run("k32v16", func(t *testing.T) {
+		key := strings.Repeat("s", 70000)
+		val := strings.Repeat("v", 1000)
+
+		ent := make(entry, entrySize(len(key), len(val), 0))
+		ent.Init([]byte(key), []byte(val), 0)
+
+		require.Equal(t, key, string(ent.Key()))
+		require.Equal(t, val, string(ent.Value()))
+	})
+
+	t.Run("k32v32", func(t *testing.T) {
+		key := strings.Repeat("s", 70000)
+		val := strings.Repeat("v", 70000)
+
+		ent := make(entry, entrySize(len(key), len(val), 0))
+		ent.Init([]byte(key), []byte(val), 0)
+
+		require.Equal(t, key, string(ent.Key()))
+		require.Equal(t, val, string(ent.Value()))
 	})
 
 	t.Run("flags", func(t *testing.T) {
@@ -42,10 +121,10 @@ func TestEntry(t *testing.T) {
 		ent := make(entry, entrySize(len(key), len(val), len(val)))
 		ent.Init([]byte(key), []byte(val), len(val))
 
-		assert.False(t, ent.HasFlag(deletedFlag))
+		require.False(t, ent.HasFlag(deletedFlag))
 		ent.AddFlag(deletedFlag)
-		assert.True(t, ent.HasFlag(deletedFlag))
+		require.True(t, ent.HasFlag(deletedFlag))
 		ent.RemoveFlag(deletedFlag)
-		assert.False(t, ent.HasFlag(deletedFlag))
+		require.False(t, ent.HasFlag(deletedFlag))
 	})
 }

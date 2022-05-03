@@ -9,9 +9,9 @@ A high performance GC-free cache library for Go-lang.
 
 ### Features
 
-- very high performance
+- high performance
 - no GC overhead
-- high hit-rate due to LRU-like eviction strategy
+- LRU-like eviction strategy
 - zero-copy access
 - small per-entry space overhead
 

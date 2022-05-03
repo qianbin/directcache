@@ -41,9 +41,7 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) (ok bool) {
 			}
 		}
 		if !ok {
-			newEnt, offset := b.allocEntry(entrySize)
-			newEnt.Init(key, val, 0)
-			b.m[keyHash] = offset
+			b.m[keyHash] = b.insertEntry(key, val, 0, entrySize)
 			ok = true
 		}
 	}
@@ -91,21 +89,22 @@ func (b *bucket) entryAt(offset int) entry {
 	return b.q.Slice(offset)
 }
 
-// allocEntry allocs space on the queue buffer for the new entry.
-// Entries are evicted like LRU strategy if no enough space.
-func (b *bucket) allocEntry(size int) (entry, int) {
-	pushCount := 0
+// insertEntry insert a new entry and returns its offset.
+// Old entries are evicted like LRU strategy if no enough space.
+func (b *bucket) insertEntry(key, val []byte, spare, entrySize int) int {
+	pushLimit := 5
 	for {
 		// have a try
-		if offset, ok := b.q.Push(nil, size); ok {
-			return b.q.Slice(offset)[:size], offset
+		if offset, ok := b.q.Push(nil, entrySize); ok {
+			entry(b.q.Slice(offset)).Init(key, val, spare)
+			return offset
 		}
 
 		// no space
 		// pop an entry at the front of the queue buffer
 		ent := b.entryAt(b.q.Front())
-		popped, ok := b.q.Pop(ent.Size())
-		if !ok {
+		ent = ent[:ent.Size()]
+		if _, ok := b.q.Pop(len(ent)); !ok {
 			// will never go here if entry is correctly implemented
 			panic(errors.New("bucket.allocEntry: pop entry failed"))
 		}
@@ -116,16 +115,16 @@ func (b *bucket) allocEntry(size int) (entry, int) {
 		}
 
 		keyHash := xxhash.Sum64(ent.Key())
-		// pushed too many times or entry not recently used, delete it
-		if pushCount > 4 || !ent.HasFlag(recentlyUsedFlag) {
+		// pushLimit exceeded, or least recently used, delete it.
+		if pushLimit < 1 || !ent.HasFlag(recentlyUsedFlag) {
 			delete(b.m, keyHash)
 			continue
 		}
 
+		pushLimit--
 		ent.RemoveFlag(recentlyUsedFlag)
 		//  and push back to the queue
-		if offset, ok := b.q.Push(popped, 0); ok {
-			pushCount++
+		if offset, ok := b.q.Push(ent, 0); ok {
 			// update the offset
 			b.m[keyHash] = offset
 		} else {

@@ -84,6 +84,6 @@ func Test_bucketHitrate(t *testing.T) {
 		}
 	}
 	hitrate := float64(hit) / float64(hit+miss)
-	// v0.9.0: 59.20%
+	// v0.9.0  hits: 5920 misses: 4080 hitrate: 59.20%
 	t.Logf("hits: %d misses: %d hitrate: %.2f%%", hit, miss, hitrate*100)
 }

@@ -45,8 +45,7 @@ func (c *Cache) Reset(capacity int) {
 // It's safe to modify contents of key and val after Set returns.
 func (c *Cache) Set(key, val []byte) bool {
 	keyHash := xxhash.Sum64(key)
-	index := keyHash % BucketCount
-	return c.buckets[index].Set(key, keyHash, val)
+	return c.buckets[keyHash%BucketCount].Set(key, keyHash, val)
 }
 
 // Del deletes the entry matching the given key from the cache.
@@ -55,8 +54,7 @@ func (c *Cache) Set(key, val []byte) bool {
 // It's safe to modify contents of key after Del returns.
 func (c *Cache) Del(key []byte) bool {
 	keyHash := xxhash.Sum64(key)
-	index := keyHash % BucketCount
-	return c.buckets[index].Del(key, keyHash)
+	return c.buckets[keyHash%BucketCount].Del(key, keyHash)
 }
 
 // Get returns the value of the entry matching the given key.
@@ -64,7 +62,8 @@ func (c *Cache) Del(key []byte) bool {
 //
 // It's safe to modify contents of key after Get returns.
 func (c *Cache) Get(key []byte) (val []byte, ok bool) {
-	ok = c.AdvGet(key, func(_val []byte) {
+	keyHash := xxhash.Sum64(key)
+	ok = c.buckets[keyHash%BucketCount].Get(key, keyHash, func(_val []byte) {
 		val = append(val, _val...)
 	}, false)
 	return
@@ -74,7 +73,8 @@ func (c *Cache) Get(key []byte) (val []byte, ok bool) {
 //
 // It's safe to modify contents of key after Has returns.
 func (c *Cache) Has(key []byte) bool {
-	return c.AdvGet(key, nil, false)
+	keyHash := xxhash.Sum64(key)
+	return c.buckets[keyHash%BucketCount].Get(key, keyHash, nil, false)
 }
 
 // AdvGet is the advanced version of Get. val is (zero-copy) accessed via fn callback.
@@ -85,6 +85,5 @@ func (c *Cache) Has(key []byte) bool {
 // It's safe to modify contents of key after AdvGet returns.
 func (c *Cache) AdvGet(key []byte, fn func(val []byte), peek bool) bool {
 	keyHash := xxhash.Sum64(key)
-	index := keyHash % BucketCount
-	return c.buckets[index].Get(key, keyHash, fn, peek)
+	return c.buckets[keyHash%BucketCount].Get(key, keyHash, fn, peek)
 }

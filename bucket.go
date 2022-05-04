@@ -27,20 +27,23 @@ func (b *bucket) Reset(capacity int) {
 // Set set val for key.
 // false returned and nonting changed if the new entry size exceeds the capacity of this bucket.
 func (b *bucket) Set(key []byte, keyHash uint64, val []byte) (ok bool) {
-	entrySize := entrySize(len(key), len(val), 0)
-
 	b.lock.Lock()
-	if entrySize <= b.q.Cap() {
-		if offset, found := b.m[keyHash]; found {
-			ent := b.entryAt(offset)
-			if bytes.Equal(key, ent.Key()) && ent.UpdateValue(val) {
-				ent.AddFlag(recentlyUsedFlag)
-				ok = true
-			} else {
+	if offset, found := b.m[keyHash]; found {
+		ent := b.entryAt(offset)
+		if bytes.Equal(ent.Key(), key) && ent.UpdateValue(val) { // in-place update
+			ent.AddFlag(recentlyUsedFlag)
+			ok = true
+		}
+
+		if !ok { // key not matched or in-place update failed
+			if entrySize := entrySize(len(key), len(val), 0); entrySize <= b.q.Cap() {
 				ent.AddFlag(deletedFlag)
+				b.m[keyHash] = b.insertEntry(key, val, 0, entrySize)
+				ok = true
 			}
 		}
-		if !ok {
+	} else { // key hash not found
+		if entrySize := entrySize(len(key), len(val), 0); entrySize <= b.q.Cap() {
 			b.m[keyHash] = b.insertEntry(key, val, 0, entrySize)
 			ok = true
 		}

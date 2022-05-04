@@ -7,7 +7,7 @@ const (
 	// BucketCount is the count of buckets in a Cache instance.
 	BucketCount = 256
 	// MinCapacity is the minimum capacity in bytes of the Cache.
-	MinCapacity = 1024 * 1024
+	MinCapacity = BucketCount * 256
 )
 
 // Cache caches key-value entries of type []byte.

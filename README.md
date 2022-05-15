@@ -11,7 +11,7 @@ A high performance GC-free cache library for Go-lang.
 
 - high performance
 - no GC overhead
-- LRU-like eviction strategy
+- LRU & custom eviction policy
 - zero-copy access
 - small per-entry space overhead
 
@@ -32,11 +32,36 @@ c := directcache.New(0)
 key := []byte("DirectCache")
 val := []byte("is awesome,")
 
-c.Set([]byte(key), []byte(val))
-got, ok := c.Get([]byte(key))
+c.Set(key, val)
+got, ok := c.Get(key)
 
 fmt.Println(string(key), string(got), ok)
 // Output: DirectCache is awesome, true
+```
+
+zero-copy access 
+
+```go
+c.AdvGet(
+    key, 
+    func(val []byte){        
+        // consume the value
+    },
+    true, // peek, which means the recently-used flag won't be added to the accessed entry.
+)
+```
+
+custom eviction policy
+```go
+shouldEvict := func(key, val []byte, recentlyUsed bool) bool {
+    if recentlyUsed {
+        return false
+    }
+    // custom rules...
+    return true
+}
+
+c.SetEvictionPolicy(shouldEvict)
 ```
 
 ## License

@@ -10,17 +10,26 @@ import (
 
 // bucket indexes and holds entries.
 type bucket struct {
-	m    map[uint64]int // maps key hash to offset
-	q    fifo           // the queue buffer stores entries
-	lock sync.RWMutex
+	m           map[uint64]int                                // maps key hash to offset
+	q           fifo                                          // the queue buffer stores entries
+	shouldEvict func(key, val []byte, recentlyUsed bool) bool // the custom evention policy
+	lock        sync.RWMutex
 }
 
-// Reset resets the bucket with new capacity.
+// Reset resets the bucket with new capacity and new eviction method.
+// If shouldEvict is nil, the default LRU policy is used.
 // It drops all entries.
 func (b *bucket) Reset(capacity int) {
 	b.lock.Lock()
 	b.m = make(map[uint64]int)
 	b.q.Reset(capacity)
+	b.lock.Unlock()
+}
+
+// SetEvictionPolicy customizes the cache eviction policy.
+func (b *bucket) SetEvictionPolicy(shouldEvict func(key, val []byte, recentlyUsed bool) bool) {
+	b.lock.Lock()
+	b.shouldEvict = shouldEvict
 	b.lock.Unlock()
 }
 
@@ -95,7 +104,7 @@ func (b *bucket) entryAt(offset int) entry {
 // insertEntry insert a new entry and returns its offset.
 // Old entries are evicted like LRU strategy if no enough space.
 func (b *bucket) insertEntry(key, val []byte, spare, entrySize int) int {
-	pushLimit := 5
+	pushLimit := 8
 	for {
 		// have a try
 		if offset, ok := b.q.Push(nil, entrySize); ok {
@@ -118,10 +127,24 @@ func (b *bucket) insertEntry(key, val []byte, spare, entrySize int) int {
 		}
 
 		keyHash := xxhash.Sum64(ent.Key())
-		// pushLimit exceeded, or least recently used, delete it.
-		if pushLimit < 1 || !ent.HasFlag(recentlyUsedFlag) {
+		// pushLimit exceeded
+		if pushLimit < 1 {
 			delete(b.m, keyHash)
 			continue
+		}
+
+		if b.shouldEvict == nil {
+			// the default LRU policy
+			if !ent.HasFlag(recentlyUsedFlag) {
+				delete(b.m, keyHash)
+				continue
+			}
+		} else {
+			// the custom eviction policy
+			if b.shouldEvict(ent.Key(), ent.Value(), ent.HasFlag(recentlyUsedFlag)) {
+				delete(b.m, keyHash)
+				continue
+			}
 		}
 
 		pushLimit--

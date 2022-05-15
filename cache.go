@@ -39,6 +39,16 @@ func (c *Cache) Reset(capacity int) {
 	c.cap = capacity
 }
 
+// SetEvictionPolicy customizes the cache eviction policy.
+// shouldEvict is called when no space to insert the new entry and have to evict an old entry.
+// If shouldEvict returns true the old entry will evict immediately, and if false the old entry
+// will likely be kept.
+func (c *Cache) SetEvictionPolicy(shouldEvict func(key, val []byte, recentlyUsed bool) bool) {
+	for i := 0; i < BucketCount; i++ {
+		c.buckets[i].SetEvictionPolicy(shouldEvict)
+	}
+}
+
 // Set stores the (key, val) entry in the cache, and returns false on failure.
 // It always succeeds unless the size of the entry exceeds 1/BucketCount of the cache capacity.
 //

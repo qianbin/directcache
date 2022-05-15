@@ -64,11 +64,20 @@ func Test_bucket(t *testing.T) {
 }
 
 func Test_bucketHitrate(t *testing.T) {
-	maxEntries := 100
+	const maxEntries = 100
 	k := make([]byte, 8)
 
 	var bkt bucket
 	bkt.Reset(entrySize(len(k), 0, 0) * maxEntries)
+	bkt.SetEvictionPolicy(func(key, val []byte, recentlyUsed bool) bool {
+		if recentlyUsed {
+			return false
+		}
+		if binary.BigEndian.Uint64(key) <= maxEntries {
+			return false
+		}
+		return true
+	})
 
 	zipf := rand.NewZipf(rand.New(rand.NewSource(1)), 1.0001, 1, uint64(maxEntries*10))
 
@@ -85,5 +94,6 @@ func Test_bucketHitrate(t *testing.T) {
 	}
 	hitrate := float64(hit) / float64(hit+miss)
 	// v0.9.0  hits: 5920 misses: 4080 hitrate: 59.20%
+	// v0.9.1  hits: 6662 misses: 3338 hitrate: 66.62% (custom eviction policy)
 	t.Logf("hits: %d misses: %d hitrate: %.2f%%", hit, miss, hitrate*100)
 }

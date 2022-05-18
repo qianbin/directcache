@@ -10,6 +10,13 @@ const (
 	recentlyUsedFlag = 2 // the entry is recently accessed
 )
 
+// Entry presents the entry of a key-value pair.
+type Entry interface {
+	Key() []byte
+	Value() []byte
+	RecentlyUsed() bool
+}
+
 // entry consists of header and body.
 type entry []byte
 
@@ -17,6 +24,9 @@ type entry []byte
 func (e entry) HasFlag(flag uint8) bool { return e[0]&(flag<<4) != 0 }
 func (e entry) AddFlag(flag uint8)      { e[0] |= (flag << 4) }
 func (e entry) RemoveFlag(flag uint8)   { e[0] &^= (flag << 4) }
+
+// RecentlyUsed complies Entry interface.
+func (e entry) RecentlyUsed() bool { return e.HasFlag(recentlyUsedFlag) }
 
 // kv vw extracts the width of key/val length.
 // kw and vw are stored in the last 4 bits of e[0].

@@ -69,11 +69,11 @@ func Test_bucketHitrate(t *testing.T) {
 
 	var bkt bucket
 	bkt.Reset(entrySize(len(k), 0, 0) * maxEntries)
-	bkt.SetEvictionPolicy(func(key, val []byte, recentlyUsed bool) bool {
-		if recentlyUsed {
+	bkt.SetEvictionPolicy(func(entry Entry) bool {
+		if entry.RecentlyUsed() {
 			return false
 		}
-		if binary.BigEndian.Uint64(key) <= maxEntries {
+		if binary.BigEndian.Uint64(entry.Key()) <= maxEntries {
 			return false
 		}
 		return true

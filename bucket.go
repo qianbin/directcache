@@ -10,9 +10,9 @@ import (
 
 // bucket indexes and holds entries.
 type bucket struct {
-	m           map[uint64]int                                // maps key hash to offset
-	q           fifo                                          // the queue buffer stores entries
-	shouldEvict func(key, val []byte, recentlyUsed bool) bool // the custom evention policy
+	m           map[uint64]int         // maps key hash to offset
+	q           fifo                   // the queue buffer stores entries
+	shouldEvict func(entry Entry) bool // the custom evention policy
 	lock        sync.RWMutex
 }
 
@@ -27,7 +27,7 @@ func (b *bucket) Reset(capacity int) {
 }
 
 // SetEvictionPolicy customizes the cache eviction policy.
-func (b *bucket) SetEvictionPolicy(shouldEvict func(key, val []byte, recentlyUsed bool) bool) {
+func (b *bucket) SetEvictionPolicy(shouldEvict func(entry Entry) bool) {
 	b.lock.Lock()
 	b.shouldEvict = shouldEvict
 	b.lock.Unlock()
@@ -141,7 +141,7 @@ func (b *bucket) insertEntry(key, val []byte, spare, entrySize int) int {
 			}
 		} else {
 			// the custom eviction policy
-			if b.shouldEvict(ent.Key(), ent.Value(), ent.HasFlag(recentlyUsedFlag)) {
+			if b.shouldEvict(ent) {
 				delete(b.m, keyHash)
 				continue
 			}

@@ -35,52 +35,50 @@ func (b *bucket) SetEvictionPolicy(shouldEvict func(entry Entry) bool) {
 
 // Set set val for key.
 // false returned and nonting changed if the new entry size exceeds the capacity of this bucket.
-func (b *bucket) Set(key []byte, keyHash uint64, val []byte) (ok bool) {
+func (b *bucket) Set(key []byte, keyHash uint64, val []byte) bool {
 	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	entrySize := entrySize(len(key), len(val), 0)
+	if entrySize > b.q.Cap() {
+		return false
+	}
+
 	if offset, found := b.m[keyHash]; found {
 		ent := b.entryAt(offset)
 		if bytes.Equal(ent.Key(), key) && ent.UpdateValue(val) { // in-place update
 			ent.AddFlag(recentlyUsedFlag)
-			ok = true
+			return true
 		}
-
-		if !ok { // key not matched or in-place update failed
-			if entrySize := entrySize(len(key), len(val), 0); entrySize <= b.q.Cap() {
-				ent.AddFlag(deletedFlag)
-				b.m[keyHash] = b.insertEntry(key, val, 0, entrySize)
-				ok = true
-			}
-		}
-	} else { // key hash not found
-		if entrySize := entrySize(len(key), len(val), 0); entrySize <= b.q.Cap() {
-			b.m[keyHash] = b.insertEntry(key, val, 0, entrySize)
-			ok = true
-		}
+		// key not matched or in-place update failed
+		ent.AddFlag(deletedFlag)
 	}
-	b.lock.Unlock()
-	return
+	// insert new entry
+	b.m[keyHash] = b.insertEntry(key, val, 0, entrySize)
+	return true
 }
 
 // Del deletes the key.
 // false is returned if key does not exist.
-func (b *bucket) Del(key []byte, keyHash uint64) (ok bool) {
+func (b *bucket) Del(key []byte, keyHash uint64) bool {
 	b.lock.Lock()
+	defer b.lock.Unlock()
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); bytes.Equal(ent.Key(), key) {
 			delete(b.m, keyHash)
 			ent.AddFlag(deletedFlag)
-			ok = true
+			return true
 		}
 	}
-	b.lock.Unlock()
-	return
+	return false
 }
 
 // Get get the value for key.
 // false is returned if the key not found.
 // If peek is true, the entry will not be marked as recently-used.
-func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) (ok bool) {
+func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) bool {
 	b.lock.RLock()
+	defer b.lock.RUnlock()
 	if offset, found := b.m[keyHash]; found {
 		if ent := b.entryAt(offset); bytes.Equal(ent.Key(), key) {
 			if !peek {
@@ -89,11 +87,10 @@ func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool)
 			if fn != nil {
 				fn(ent.Value())
 			}
-			ok = true
+			return true
 		}
 	}
-	b.lock.RUnlock()
-	return
+	return false
 }
 
 // entryAt creates an entry object at the offset of the queue buffer.

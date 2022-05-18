@@ -3,76 +3,13 @@ package benches
 import (
 	"encoding/binary"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 
-	"github.com/VictoriaMetrics/fastcache"
-	"github.com/coocood/freecache"
 	"github.com/qianbin/directcache"
 )
 
 const capacity = 32 * 1024 * 1024
-
-type cache interface {
-	get(key []byte) ([]byte, bool)
-	set(key, val []byte)
-	capacity() int
-}
-
-type getFunc func(key []byte) ([]byte, bool)
-type setFunc func(key, val []byte)
-type capacityFunc func() int
-type nowFunc func() uint32
-
-func (f getFunc) get(key []byte) ([]byte, bool) { return f(key) }
-func (f setFunc) set(key, val []byte)           { f(key, val) }
-func (f capacityFunc) capacity() int            { return f() }
-func (f nowFunc) Now() uint32                   { return f() }
-
-func newDirectCache(cap int) cache {
-	c := directcache.New(cap)
-	return &struct {
-		getFunc
-		setFunc
-		capacityFunc
-	}{
-		func(key []byte) ([]byte, bool) { return c.Get(key) },
-		func(key, val []byte) { c.Set(key, val) },
-		func() int { return cap },
-	}
-}
-
-func newFreeCache(cap int) cache {
-	t := uint32(0)
-	c := freecache.NewCacheCustomTimer(cap, nowFunc(func() uint32 {
-		t++
-		return t
-	}))
-	return &struct {
-		getFunc
-		setFunc
-		capacityFunc
-	}{
-		func(key []byte) ([]byte, bool) {
-			val, err := c.Get(key)
-			return val, err == nil
-		},
-		func(key, val []byte) { c.Set(key, val, 0) },
-		func() int { return cap },
-	}
-}
-
-func newFastCache(cap int) cache {
-	c := fastcache.New(cap)
-	return &struct {
-		getFunc
-		setFunc
-		capacityFunc
-	}{
-		func(key []byte) ([]byte, bool) { return c.HasGet(nil, key) },
-		func(key, val []byte) { c.Set(key, val) },
-		func() int { return cap },
-	}
-}
 
 func benchmarkGet(b *testing.B, c cache) {
 	var (
@@ -95,6 +32,32 @@ func benchmarkGet(b *testing.B, c cache) {
 	}
 }
 
+func benchmarkParallelGet(b *testing.B, c cache) {
+	var (
+		key     = make([]byte, 8)
+		val     = make([]byte, 16)
+		entries = c.capacity() / (len(key) + len(val)) / 2
+	)
+
+	// fill the cache
+	for i := 0; i < entries; i++ {
+		binary.BigEndian.PutUint64(key[:], uint64(i))
+		c.set(key, val)
+	}
+
+	b.SetBytes(int64(len(key) + len(val)))
+	b.ResetTimer()
+
+	b.RunParallel(func(p *testing.PB) {
+		i := 0
+		for p.Next() {
+			i++
+			binary.BigEndian.PutUint64(key[:], uint64(i%entries))
+			c.get(key)
+		}
+	})
+}
+
 func benchmarkSet(b *testing.B, c cache) {
 	var (
 		key = make([]byte, 8)
@@ -109,16 +72,74 @@ func benchmarkSet(b *testing.B, c cache) {
 	}
 }
 
+func benchmarkParallelSet(b *testing.B, c cache) {
+	var (
+		key     = make([]byte, 8)
+		val     = make([]byte, 16)
+		counter uint64
+	)
+
+	b.SetBytes(int64(len(key) + len(val)))
+	b.ResetTimer()
+	b.RunParallel(func(p *testing.PB) {
+		for p.Next() {
+			i := atomic.AddUint64(&counter, 1) - 1
+			binary.BigEndian.PutUint64(key, uint64(i))
+			c.set(key, val)
+		}
+	})
+}
+
+func benchmarkParallelSetGet(b *testing.B, c cache) {
+	var (
+		key     = make([]byte, 8)
+		val     = make([]byte, 16)
+		counter uint64
+	)
+	const frac = 8
+
+	b.SetBytes(int64(len(key) + len(val)))
+	b.ResetTimer()
+	b.RunParallel(func(p *testing.PB) {
+		for p.Next() {
+			i := atomic.AddUint64(&counter, 1) - 1
+			binary.BigEndian.PutUint64(key, i/frac)
+			if i%frac == 0 {
+				c.set(key, val)
+			}
+			c.get(key)
+		}
+	})
+}
+
 func BenchmarkGet(b *testing.B) {
 	b.Run("DirectCache", func(b *testing.B) { benchmarkGet(b, newDirectCache(capacity)) })
 	b.Run("FreeCache", func(b *testing.B) { benchmarkGet(b, newFreeCache(capacity)) })
 	b.Run("FastCache", func(b *testing.B) { benchmarkGet(b, newFastCache(capacity)) })
 }
 
+func BenchmarkParallelGet(b *testing.B) {
+	b.Run("DirectCache", func(b *testing.B) { benchmarkParallelGet(b, newDirectCache(capacity)) })
+	b.Run("FreeCache", func(b *testing.B) { benchmarkParallelGet(b, newFreeCache(capacity)) })
+	b.Run("FastCache", func(b *testing.B) { benchmarkParallelGet(b, newFastCache(capacity)) })
+}
+
 func BenchmarkSet(b *testing.B) {
 	b.Run("DirectCache", func(b *testing.B) { benchmarkSet(b, newDirectCache(capacity)) })
 	b.Run("FreeCache", func(b *testing.B) { benchmarkSet(b, newFreeCache(capacity)) })
 	b.Run("FastCache", func(b *testing.B) { benchmarkSet(b, newFastCache(capacity)) })
+}
+
+func BenchmarkParallelSet(b *testing.B) {
+	b.Run("DirectCache", func(b *testing.B) { benchmarkParallelSet(b, newDirectCache(capacity)) })
+	b.Run("FreeCache", func(b *testing.B) { benchmarkParallelSet(b, newFreeCache(capacity)) })
+	b.Run("FastCache", func(b *testing.B) { benchmarkParallelSet(b, newFastCache(capacity)) })
+}
+
+func BenchmarkParallelSetGet(b *testing.B) {
+	b.Run("DirectCache", func(b *testing.B) { benchmarkParallelSetGet(b, newDirectCache(capacity)) })
+	b.Run("FreeCache", func(b *testing.B) { benchmarkParallelSetGet(b, newFreeCache(capacity)) })
+	b.Run("FastCache", func(b *testing.B) { benchmarkParallelSetGet(b, newFastCache(capacity)) })
 }
 
 func testHitrate(t *testing.T, c cache, entries int) {
@@ -147,6 +168,11 @@ func TestHitrate(t *testing.T) {
 	const entries = 10000
 
 	t.Run("DirectCache", func(t *testing.T) { testHitrate(t, newDirectCache(capacity), entries) })
+	t.Run("DirectCache(custom policy)", func(t *testing.T) {
+		testHitrate(t, newDirectCacheWithPolicy(capacity, func(entry directcache.Entry) bool {
+			return binary.BigEndian.Uint64(entry.Key()) > entries
+		}), entries)
+	})
 	t.Run("FreeCache", func(t *testing.T) { testHitrate(t, newFreeCache(capacity), entries) })
 	t.Run("FastCache", func(t *testing.T) { testHitrate(t, newFastCache(capacity), entries) })
 }

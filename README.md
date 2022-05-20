@@ -24,23 +24,23 @@ goos: linux
 goarch: amd64
 pkg: benches
 cpu: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz
-BenchmarkGet/DirectCache-8              39112850     153.4 ns/op     156.47 MB/s
-BenchmarkGet/FreeCache-8                26317232     226.3 ns/op     106.07 MB/s
-BenchmarkGet/FastCache-8                37878956     159.6 ns/op     150.35 MB/s
-BenchmarkParallelGet/DirectCache-8     184576632     32.78 ns/op     732.18 MB/s
-BenchmarkParallelGet/FreeCache-8       171217690     35.01 ns/op     685.54 MB/s
-BenchmarkParallelGet/FastCache-8       178660434     32.59 ns/op     736.36 MB/s
-BenchmarkSet/DirectCache-8              27788277     364.0 ns/op      65.94 MB/s
-BenchmarkSet/FreeCache-8                26571054     331.6 ns/op      72.38 MB/s
-BenchmarkSet/FastCache-8                28562538     219.9 ns/op     109.15 MB/s
-BenchmarkParallelSet/DirectCache-8      62751762     103.5 ns/op     231.94 MB/s
-BenchmarkParallelSet/FreeCache-8        62635524     105.2 ns/op     228.10 MB/s
-BenchmarkParallelSet/FastCache-8        60270451     96.31 ns/op     249.20 MB/s
-BenchmarkParallelSetGet/DirectCache-8   31439042     219.8 ns/op     109.20 MB/s
-BenchmarkParallelSetGet/FreeCache-8     24580938     274.6 ns/op      87.41 MB/s
-BenchmarkParallelSetGet/FastCache-8     31697812     185.8 ns/op     129.18 MB/s
+BenchmarkGet/DirectCache-8               39089787     154.7 ns/op    155.16 MB/s
+BenchmarkGet/FreeCache-8                 26036332     228.4 ns/op    105.08 MB/s
+BenchmarkGet/FastCache-8                 38764371     158.6 ns/op    151.28 MB/s
+BenchmarkParallelGet/DirectCache-8      161248044     37.18 ns/op    645.52 MB/s
+BenchmarkParallelGet/FreeCache-8        100000000     52.67 ns/op    455.68 MB/s
+BenchmarkParallelGet/FastCache-8        180940428     33.24 ns/op    722.07 MB/s
+BenchmarkSet/DirectCache-8               27090906     367.3 ns/op     65.35 MB/s
+BenchmarkSet/FreeCache-8                 26872202     334.9 ns/op     71.67 MB/s
+BenchmarkSet/FastCache-8                 28796907     222.3 ns/op    107.96 MB/s
+BenchmarkParallelSet/DirectCache-8       83409436     84.57 ns/op    283.79 MB/s
+BenchmarkParallelSet/FreeCache-8         73930858     85.63 ns/op    280.28 MB/s
+BenchmarkParallelSet/FastCache-8         83161243     86.25 ns/op    278.25 MB/s
+BenchmarkParallelSetGet/DirectCache-8    32223900     213.9 ns/op    112.22 MB/s
+BenchmarkParallelSetGet/FreeCache-8      23440317     290.7 ns/op     82.57 MB/s
+BenchmarkParallelSetGet/FastCache-8      33250729     178.9 ns/op    134.19 MB/s
 PASS
-ok  	benches	116.088s
+ok  	benches	114.304s
 ```
 
 ```bash

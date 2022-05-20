@@ -6,6 +6,8 @@ import (
 	"github.com/qianbin/directcache"
 )
 
+const capacity = 32 * 1024 * 1024
+
 type cache interface {
 	get(key []byte) ([]byte, bool)
 	set(key, val []byte)
@@ -22,8 +24,8 @@ func (f setFunc) set(key, val []byte)           { f(key, val) }
 func (f capacityFunc) capacity() int            { return f() }
 func (f nowFunc) Now() uint32                   { return f() }
 
-func newDirectCache(cap int) cache {
-	c := directcache.New(cap)
+func newDirectCache() cache {
+	c := directcache.New(capacity)
 	return &struct {
 		getFunc
 		setFunc
@@ -31,12 +33,12 @@ func newDirectCache(cap int) cache {
 	}{
 		func(key []byte) ([]byte, bool) { return c.Get(key) },
 		func(key, val []byte) { c.Set(key, val) },
-		func() int { return cap },
+		func() int { return c.Capacity() },
 	}
 }
 
-func newDirectCacheWithPolicy(cap int, shouldEvict func(entry directcache.Entry) bool) cache {
-	c := directcache.New(cap)
+func newDirectCacheWithPolicy(shouldEvict func(entry directcache.Entry) bool) cache {
+	c := directcache.New(capacity)
 	c.SetEvictionPolicy(shouldEvict)
 	return &struct {
 		getFunc
@@ -45,13 +47,13 @@ func newDirectCacheWithPolicy(cap int, shouldEvict func(entry directcache.Entry)
 	}{
 		func(key []byte) ([]byte, bool) { return c.Get(key) },
 		func(key, val []byte) { c.Set(key, val) },
-		func() int { return cap },
+		func() int { return c.Capacity() },
 	}
 }
 
-func newFreeCache(cap int) cache {
+func newFreeCache() cache {
 	t := uint32(0)
-	c := freecache.NewCacheCustomTimer(cap, nowFunc(func() uint32 {
+	c := freecache.NewCacheCustomTimer(capacity, nowFunc(func() uint32 {
 		t++
 		return t
 	}))
@@ -65,12 +67,12 @@ func newFreeCache(cap int) cache {
 			return val, err == nil
 		},
 		func(key, val []byte) { c.Set(key, val, 0) },
-		func() int { return cap },
+		func() int { return capacity },
 	}
 }
 
-func newFastCache(cap int) cache {
-	c := fastcache.New(cap)
+func newFastCache() cache {
+	c := fastcache.New(capacity)
 	return &struct {
 		getFunc
 		setFunc
@@ -78,6 +80,6 @@ func newFastCache(cap int) cache {
 	}{
 		func(key []byte) ([]byte, bool) { return c.HasGet(nil, key) },
 		func(key, val []byte) { c.Set(key, val) },
-		func() int { return cap },
+		func() int { return capacity },
 	}
 }

@@ -24,43 +24,51 @@ goos: linux
 goarch: amd64
 pkg: benches
 cpu: Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz
-BenchmarkGet/DirectCache-8               39089787     154.7 ns/op    155.16 MB/s
-BenchmarkGet/FreeCache-8                 26036332     228.4 ns/op    105.08 MB/s
-BenchmarkGet/FastCache-8                 38764371     158.6 ns/op    151.28 MB/s
-BenchmarkParallelGet/DirectCache-8      161248044     37.18 ns/op    645.52 MB/s
-BenchmarkParallelGet/FreeCache-8        100000000     52.67 ns/op    455.68 MB/s
-BenchmarkParallelGet/FastCache-8        180940428     33.24 ns/op    722.07 MB/s
-BenchmarkSet/DirectCache-8               27090906     367.3 ns/op     65.35 MB/s
-BenchmarkSet/FreeCache-8                 26872202     334.9 ns/op     71.67 MB/s
-BenchmarkSet/FastCache-8                 28796907     222.3 ns/op    107.96 MB/s
-BenchmarkParallelSet/DirectCache-8       83409436     84.57 ns/op    283.79 MB/s
-BenchmarkParallelSet/FreeCache-8         73930858     85.63 ns/op    280.28 MB/s
-BenchmarkParallelSet/FastCache-8         83161243     86.25 ns/op    278.25 MB/s
-BenchmarkParallelSetGet/DirectCache-8    32223900     213.9 ns/op    112.22 MB/s
-BenchmarkParallelSetGet/FreeCache-8      23440317     290.7 ns/op     82.57 MB/s
-BenchmarkParallelSetGet/FastCache-8      33250729     178.9 ns/op    134.19 MB/s
+BenchmarkGet/DirectCache-8               37590464      158.7 ns/op    151.22 MB/s
+BenchmarkGet/FreeCache-8                 25786171      230.9 ns/op    103.96 MB/s
+BenchmarkGet/FastCache-8                 37254318      159.3 ns/op    150.64 MB/s
+BenchmarkGet/BigCache-8                  37842639      186.1 ns/op    128.97 MB/s
+BenchmarkParallelGet/DirectCache-8      161808373      36.99 ns/op    648.87 MB/s
+BenchmarkParallelGet/FreeCache-8        100000000      53.11 ns/op    451.90 MB/s
+BenchmarkParallelGet/FastCache-8        179409560      33.35 ns/op    719.61 MB/s
+BenchmarkParallelGet/BigCache-8         134716734      44.69 ns/op    536.99 MB/s
+BenchmarkSet/DirectCache-8               25885528      371.9 ns/op     64.54 MB/s
+BenchmarkSet/FreeCache-8                 26270774      335.2 ns/op     71.60 MB/s
+BenchmarkSet/FastCache-8                 28288302      225.2 ns/op    106.58 MB/s
+BenchmarkSet/BigCache-8                  19396027      462.2 ns/op     51.93 MB/s
+BenchmarkParallelSet/DirectCache-8       84369208      85.00 ns/op    282.34 MB/s
+BenchmarkParallelSet/FreeCache-8         73204508      86.74 ns/op    276.68 MB/s
+BenchmarkParallelSet/FastCache-8         82061668      86.49 ns/op    277.50 MB/s
+BenchmarkParallelSet/BigCache-8          71246137      96.85 ns/op    247.81 MB/s
+BenchmarkParallelSetGet/DirectCache-8    32410581      215.7 ns/op    111.26 MB/s
+BenchmarkParallelSetGet/FreeCache-8      23206942      293.7 ns/op     81.71 MB/s
+BenchmarkParallelSetGet/FastCache-8      32624253      179.3 ns/op    133.87 MB/s
+BenchmarkParallelSetGet/BigCache-8       24936825      247.4 ns/op     97.02 MB/s
 PASS
-ok  	benches	114.304s
+ok  	benches	156.348s
 ```
 
 ```bash
 $ go test -timeout 30s -run ^TestHitrate$ benches -v
 === RUN   TestHitrate
 === RUN   TestHitrate/DirectCache
-    benches_test.go:164: hits: 739035	misses: 260965	hitrate: 73.90%
+    benches_test.go:175: hits: 739035	misses: 260965	hitrate: 73.90%
 === RUN   TestHitrate/DirectCache(custom_policy)
-    benches_test.go:164: hits: 780808	misses: 219192	hitrate: 78.08%
+    benches_test.go:175: hits: 780808	misses: 219192	hitrate: 78.08%
 === RUN   TestHitrate/FreeCache
-    benches_test.go:164: hits: 727308	misses: 272692	hitrate: 72.73%
+    benches_test.go:175: hits: 727308	misses: 272692	hitrate: 72.73%
 === RUN   TestHitrate/FastCache
-    benches_test.go:164: hits: 696096	misses: 303904	hitrate: 69.61%
---- PASS: TestHitrate (2.72s)
+    benches_test.go:175: hits: 696096	misses: 303904	hitrate: 69.61%
+=== RUN   TestHitrate/BigCache
+    benches_test.go:175: hits: 697831	misses: 302169	hitrate: 69.78%
+--- PASS: TestHitrate (3.43s)
     --- PASS: TestHitrate/DirectCache (0.58s)
-    --- PASS: TestHitrate/DirectCache(custom_policy) (0.75s)
+    --- PASS: TestHitrate/DirectCache(custom_policy) (0.76s)
     --- PASS: TestHitrate/FreeCache (0.67s)
     --- PASS: TestHitrate/FastCache (0.72s)
+    --- PASS: TestHitrate/BigCache (0.71s)
 PASS
-ok  	benches	2.722s
+ok  	benches	3.439s
 ```
 
 ### Installation

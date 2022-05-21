@@ -122,30 +122,35 @@ func BenchmarkGet(b *testing.B) {
 	b.Run("DirectCache", func(b *testing.B) { benchmarkGet(b, newDirectCache()) })
 	b.Run("FreeCache", func(b *testing.B) { benchmarkGet(b, newFreeCache()) })
 	b.Run("FastCache", func(b *testing.B) { benchmarkGet(b, newFastCache()) })
+	b.Run("BigCache", func(b *testing.B) { benchmarkGet(b, newBigCache()) })
 }
 
 func BenchmarkParallelGet(b *testing.B) {
 	b.Run("DirectCache", func(b *testing.B) { benchmarkParallelGet(b, newDirectCache()) })
 	b.Run("FreeCache", func(b *testing.B) { benchmarkParallelGet(b, newFreeCache()) })
 	b.Run("FastCache", func(b *testing.B) { benchmarkParallelGet(b, newFastCache()) })
+	b.Run("BigCache", func(b *testing.B) { benchmarkParallelGet(b, newBigCache()) })
 }
 
 func BenchmarkSet(b *testing.B) {
 	b.Run("DirectCache", func(b *testing.B) { benchmarkSet(b, newDirectCache()) })
 	b.Run("FreeCache", func(b *testing.B) { benchmarkSet(b, newFreeCache()) })
 	b.Run("FastCache", func(b *testing.B) { benchmarkSet(b, newFastCache()) })
+	b.Run("BigCache", func(b *testing.B) { benchmarkSet(b, newBigCache()) })
 }
 
 func BenchmarkParallelSet(b *testing.B) {
 	b.Run("DirectCache", func(b *testing.B) { benchmarkParallelSet(b, newDirectCache()) })
 	b.Run("FreeCache", func(b *testing.B) { benchmarkParallelSet(b, newFreeCache()) })
 	b.Run("FastCache", func(b *testing.B) { benchmarkParallelSet(b, newFastCache()) })
+	b.Run("BigCache", func(b *testing.B) { benchmarkParallelSet(b, newBigCache()) })
 }
 
 func BenchmarkParallelSetGet(b *testing.B) {
 	b.Run("DirectCache", func(b *testing.B) { benchmarkParallelSetGet(b, newDirectCache()) })
 	b.Run("FreeCache", func(b *testing.B) { benchmarkParallelSetGet(b, newFreeCache()) })
 	b.Run("FastCache", func(b *testing.B) { benchmarkParallelSetGet(b, newFastCache()) })
+	b.Run("BigCache", func(b *testing.B) { benchmarkParallelSetGet(b, newBigCache()) })
 }
 
 func testHitrate(t *testing.T, c cache, entries int) {
@@ -181,4 +186,5 @@ func TestHitrate(t *testing.T) {
 	})
 	t.Run("FreeCache", func(t *testing.T) { testHitrate(t, newFreeCache(), entries) })
 	t.Run("FastCache", func(t *testing.T) { testHitrate(t, newFastCache(), entries) })
+	t.Run("BigCache", func(t *testing.T) { testHitrate(t, newBigCache(), entries) })
 }

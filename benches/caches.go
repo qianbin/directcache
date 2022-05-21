@@ -2,6 +2,7 @@ package benches
 
 import (
 	"github.com/VictoriaMetrics/fastcache"
+	"github.com/allegro/bigcache/v3"
 	"github.com/coocood/freecache"
 	"github.com/qianbin/directcache"
 )
@@ -80,6 +81,25 @@ func newFastCache() cache {
 	}{
 		func(key []byte) ([]byte, bool) { return c.HasGet(nil, key) },
 		func(key, val []byte) { c.Set(key, val) },
+		func() int { return capacity },
+	}
+}
+
+func newBigCache() cache {
+	c, _ := bigcache.NewBigCache(bigcache.Config{
+		Shards:           256,
+		HardMaxCacheSize: capacity / 1024 / 1024,
+	})
+	return &struct {
+		getFunc
+		setFunc
+		capacityFunc
+	}{
+		func(key []byte) ([]byte, bool) {
+			val, err := c.Get(string(key))
+			return val, err == nil
+		},
+		func(key, val []byte) { c.Set(string(key), val) },
 		func() int { return capacity },
 	}
 }

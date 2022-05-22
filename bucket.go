@@ -39,23 +39,22 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) bool {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
-	entrySize := entrySize(len(key), len(val), 0)
-	if entrySize > b.q.Cap() {
-		return false
-	}
-
 	if offset, found := b.m[keyHash]; found {
 		ent := b.entryAt(offset)
-		if bytes.Equal(ent.Key(), key) && ent.UpdateValue(val) { // in-place update
-			ent.AddFlag(recentlyUsedFlag)
+		if spare := ent.BodySize() - len(key) - len(val); spare >= 0 { // in-place update
+			ent.Init(key, val, spare)
+			ent.AddFlag(recentlyUsedFlag) // avoid evicted too early
 			return true
 		}
 		// key not matched or in-place update failed
 		ent.AddFlag(deletedFlag)
 	}
 	// insert new entry
-	b.m[keyHash] = b.insertEntry(key, val, 0, entrySize)
-	return true
+	if offset, ok := b.insertEntry(key, val, 0); ok {
+		b.m[keyHash] = offset
+		return true
+	}
+	return false
 }
 
 // Del deletes the key.
@@ -100,13 +99,18 @@ func (b *bucket) entryAt(offset int) entry {
 
 // insertEntry insert a new entry and returns its offset.
 // Old entries are evicted like LRU strategy if no enough space.
-func (b *bucket) insertEntry(key, val []byte, spare, entrySize int) int {
+func (b *bucket) insertEntry(key, val []byte, spare int) (int, bool) {
+	entrySize := entrySize(len(key), len(val), spare)
+	if entrySize > b.q.Cap() {
+		return 0, false
+	}
+
 	pushLimit := 8
 	for {
 		// have a try
 		if offset, ok := b.q.Push(nil, entrySize); ok {
 			entry(b.q.Slice(offset)).Init(key, val, spare)
-			return offset
+			return offset, true
 		}
 
 		// no space

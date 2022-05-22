@@ -28,18 +28,20 @@ func (e entry) RemoveFlag(flag uint8)   { e[0] &^= (flag << 4) }
 // RecentlyUsed complies Entry interface.
 func (e entry) RecentlyUsed() bool { return e.HasFlag(recentlyUsedFlag) }
 
-// kv vw extracts the width of key/val length.
-// kw and vw are stored in the last 4 bits of e[0].
-func (e entry) kw() int { return 1 << ((e[0] >> 2) & 3) }
-func (e entry) vw() int { return 1 << (e[0] & 3) }
+// lw extracts the number of bytes to present key/val length.
+// It's stored in the last 2 bits of e[0].
+func (e entry) lw() int { return 1 << (e[0] & 3) }
 
-func (e entry) hdrSize() int { return 1 + e.kw() + e.vw()*2 }
-func (e entry) keyLen() int  { return e.intAt(1, e.kw()) }
-func (e entry) valLen() int  { return e.intAt(1+e.kw(), e.vw()) }
-func (e entry) spare() int   { return e.intAt(1+e.kw()+e.vw(), e.vw()) }
+func (e entry) hdrSize() int { return 1 + e.lw()*3 }
+func (e entry) keyLen() int  { return e.intAt(1, e.lw()) }
+func (e entry) valLen() int  { return e.intAt(1+e.lw(), e.lw()) }
+func (e entry) spare() int   { return e.intAt(1+e.lw()*2, e.lw()) }
 
 // Size returns the entry size.
 func (e entry) Size() int { return e.hdrSize() + e.keyLen() + e.valLen() + e.spare() }
+
+// BodySize returns the sum of key, val length and spare.
+func (e entry) BodySize() int { return e.keyLen() + e.valLen() + e.spare() }
 
 // Key returns the key of the entry.
 func (e entry) Key() []byte { return e[e.hdrSize():][:e.keyLen()] }
@@ -52,33 +54,19 @@ func (e entry) Value() []byte { return e[e.hdrSize():][e.keyLen():][:e.valLen()]
 // The entry must be pre-alloced.
 func (e entry) Init(key []byte, val []byte, spare int) {
 	keyLen, valLen := len(key), len(val)
-	kb, vb := bitw(keyLen), bitw(valLen+spare)
+	lb := bitw(keyLen + valLen + spare)
 
 	// init header
-	e[0] = (kb << 2) | vb
-	kw, vw := 1<<kb, 1<<vb
-	e.setIntAt(1, kw, keyLen)
-	e.setIntAt(1+kw, vw, valLen)
-	e.setIntAt(1+kw+vw, vw, spare)
+	e[0] = lb
+	lw := 1 << lb
+	e.setIntAt(1, lw, keyLen)
+	e.setIntAt(1+lw, lw, valLen)
+	e.setIntAt(1+lw*2, lw, spare)
 
 	// init key and value
-	hdrSize := 1 + kw + vw*2
+	hdrSize := 1 + lw*3
 	copy(e[hdrSize:], key)
 	copy(e[hdrSize:][keyLen:], val)
-}
-
-// UpdateValue updates the value.
-//
-// It fails if no enough space.
-func (e entry) UpdateValue(val []byte) bool {
-	cap := e.valLen() + e.spare()
-	if nvl := len(val); nvl <= cap {
-		e.setIntAt(1+e.kw(), e.vw(), nvl)            // new value len
-		e.setIntAt(1+e.kw()+e.vw(), e.vw(), cap-nvl) // new spare
-		copy(e[e.hdrSize():][e.keyLen():], val)
-		return true
-	}
-	return false
 }
 
 func (e entry) intAt(i int, w int) int {
@@ -105,7 +93,7 @@ func (e entry) setIntAt(i int, w int, n int) {
 
 // entrySize returns the size of an entry for given kv lengths.
 func entrySize(keyLen, valLen, spare int) int {
-	return 1 + (1 << bitw(keyLen)) + (2 << bitw(valLen+spare)) + // hdr
+	return 1 + (3 << bitw(keyLen+valLen+spare)) + // hdr
 		keyLen + valLen + spare //body
 }
 

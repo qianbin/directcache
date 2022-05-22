@@ -18,12 +18,6 @@ func Test_entry(t *testing.T) {
 		require.Equal(t, entrySize(len(key), len(val), len(val)), ent.Size())
 		require.Equal(t, key, string(ent.Key()))
 		require.Equal(t, val, string(ent.Value()))
-
-		require.True(t, ent.UpdateValue([]byte(val+val)), "has spare space, should ok")
-		require.Equal(t, val+val, string(ent.Value()), "should be the updated value")
-
-		require.False(t, ent.UpdateValue([]byte(val+val+val)), "no space, should fail")
-		require.Equal(t, val+val, string(ent.Value()), "should be the previous value")
 	})
 
 	t.Run("k8v16", func(t *testing.T) {

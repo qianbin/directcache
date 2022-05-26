@@ -63,6 +63,16 @@ shouldEvict := func(entry directcache.Entry) bool {
 c.SetEvictionPolicy(shouldEvict)
 ```
 
+dump entries
+
+```go
+c.Dump(func(e directcache.Entry) bool {
+    // do something to e
+    return true    
+})
+```
+
+
 ### Benchmarks
 
 The performance is compared with [FreeCache](https://github.com/coocood/freecache), [FastCache](https://github.com/VictoriaMetrics/fastcache) and [BigCache](https://github.com/allegro/bigcache). The code of benchmarks can be found under [./benches/](./benches/).

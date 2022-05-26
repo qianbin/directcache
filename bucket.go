@@ -92,6 +92,28 @@ func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool)
 	return false
 }
 
+// Dump dumps entries.
+func (b *bucket) Dump(f func(Entry) bool) bool {
+	b.lock.RLock()
+	defer b.lock.RUnlock()
+
+	size := b.q.Size()
+	offset := b.q.Front()
+	for size > 0 {
+		ent := b.entryAt(offset)
+		if len(ent) == 0 {
+			offset = 0
+			continue
+		}
+		size -= ent.Size()
+		offset += ent.Size()
+		if !ent.HasFlag(deletedFlag) && !f(ent) {
+			return false
+		}
+	}
+	return true
+}
+
 // entryAt creates an entry object at the offset of the queue buffer.
 func (b *bucket) entryAt(offset int) entry {
 	return b.q.Slice(offset)

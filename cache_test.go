@@ -3,6 +3,7 @@ package directcache_test
 import (
 	"encoding/binary"
 	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/cespare/xxhash/v2"
@@ -53,6 +54,27 @@ func TestCache(t *testing.T) {
 		got = append(got, val...)
 	}, false))
 	require.Equal(t, v, string(got))
+}
+
+func TestCacheDump(t *testing.T) {
+	c := directcache.New(0)
+	var set []string
+	for i := 0; i < 100; i++ {
+		k := []byte{'k', byte(i)}
+		v := []byte{'v', byte(i)}
+		c.Set(k, v)
+		set = append(set, string(k)+string(v))
+	}
+	sort.Strings(set)
+
+	var dumps []string
+	c.Dump(func(e directcache.Entry) bool {
+		dumps = append(dumps, string(e.Key())+string(e.Value()))
+		return true
+	})
+	sort.Strings(dumps)
+
+	require.Equal(t, set, dumps)
 }
 
 func BenchmarkCacheSetGet(b *testing.B) {

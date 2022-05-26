@@ -63,6 +63,36 @@ func Test_bucket(t *testing.T) {
 	}
 }
 
+func Test_bucketDump(t *testing.T) {
+	var bkt bucket
+	bkt.Reset(40)
+	var ser []byte
+	// overfill, the first inserted kv should be evicted
+	for i := 0; i < 6; i++ {
+		k := []byte{'k', byte(i)}
+		v := []byte{'v', byte(i)}
+		bkt.Set(k, xxhash.Sum64(k), v)
+		ser = append(ser, k...)
+		ser = append(ser, v...)
+	}
+
+	var dumps []byte
+	require.True(t, bkt.Dump(func(e Entry) bool {
+		dumps = append(dumps, e.Key()...)
+		dumps = append(dumps, e.Value()...)
+		return true
+	}))
+	// skip the first inserted kv
+	require.Equal(t, ser[4:], dumps)
+
+	calls := 0
+	require.False(t, bkt.Dump(func(e Entry) bool {
+		calls++
+		return false
+	}))
+	require.Equal(t, 1, calls)
+}
+
 func Test_bucketHitrate(t *testing.T) {
 	const maxEntries = 100
 	k := make([]byte, 8)

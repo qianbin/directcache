@@ -97,3 +97,14 @@ func (c *Cache) AdvGet(key []byte, fn func(val []byte), peek bool) bool {
 	keyHash := xxhash.Sum64(key)
 	return c.buckets[keyHash%BucketCount].Get(key, keyHash, fn, peek)
 }
+
+// Dump dumps all saved entires bucket by bucket in the order of insertion.
+// It's interrupted if f returns false。
+// The provided entry is read-only and never modify its key or value.
+func (c *Cache) Dump(f func(Entry) bool) {
+	for i := 0; i < BucketCount; i++ {
+		if !c.buckets[i].Dump(f) {
+			break
+		}
+	}
+}

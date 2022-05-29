@@ -10,7 +10,7 @@ import (
 
 // bucket indexes and holds entries.
 type bucket struct {
-	m           map[uint64]int         // maps key hash to offset
+	m           vmap                   // maps key hash to offset
 	q           fifo                   // the queue buffer stores entries
 	shouldEvict func(entry Entry) bool // the custom evention policy
 	lock        sync.RWMutex
@@ -21,7 +21,7 @@ type bucket struct {
 // It drops all entries.
 func (b *bucket) Reset(capacity int) {
 	b.lock.Lock()
-	b.m = make(map[uint64]int)
+	b.m.Reset(capacity - 1)
 	b.q.Reset(capacity)
 	b.lock.Unlock()
 }
@@ -39,7 +39,7 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) bool {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
-	if offset, found := b.m[keyHash]; found {
+	if offset, found := b.m.Get(keyHash); found {
 		ent := b.entryAt(offset)
 		if spare := ent.BodySize() - len(key) - len(val); spare >= 0 { // in-place update
 			ent.Init(key, val, spare)
@@ -51,7 +51,7 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) bool {
 	}
 	// insert new entry
 	if offset, ok := b.insertEntry(key, val, 0); ok {
-		b.m[keyHash] = offset
+		b.m.Set(keyHash, offset)
 		return true
 	}
 	return false
@@ -62,9 +62,9 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) bool {
 func (b *bucket) Del(key []byte, keyHash uint64) bool {
 	b.lock.Lock()
 	defer b.lock.Unlock()
-	if offset, found := b.m[keyHash]; found {
+	if offset, found := b.m.Get(keyHash); found {
 		if ent := b.entryAt(offset); bytes.Equal(ent.Key(), key) {
-			delete(b.m, keyHash)
+			b.m.Del(keyHash)
 			ent.AddFlag(deletedFlag)
 			return true
 		}
@@ -78,7 +78,7 @@ func (b *bucket) Del(key []byte, keyHash uint64) bool {
 func (b *bucket) Get(key []byte, keyHash uint64, fn func(val []byte), peek bool) bool {
 	b.lock.RLock()
 	defer b.lock.RUnlock()
-	if offset, found := b.m[keyHash]; found {
+	if offset, found := b.m.Get(keyHash); found {
 		if ent := b.entryAt(offset); bytes.Equal(ent.Key(), key) {
 			if !peek {
 				ent.AddFlag(recentlyUsedFlag)
@@ -152,20 +152,20 @@ func (b *bucket) insertEntry(key, val []byte, spare int) (int, bool) {
 		keyHash := xxhash.Sum64(ent.Key())
 		// pushLimit exceeded
 		if pushLimit < 1 {
-			delete(b.m, keyHash)
+			b.m.Del(keyHash)
 			continue
 		}
 
 		if b.shouldEvict == nil {
 			// the default LRU policy
 			if !ent.HasFlag(recentlyUsedFlag) {
-				delete(b.m, keyHash)
+				b.m.Del(keyHash)
 				continue
 			}
 		} else {
 			// the custom eviction policy
 			if b.shouldEvict(ent) {
-				delete(b.m, keyHash)
+				b.m.Del(keyHash)
 				continue
 			}
 		}
@@ -175,7 +175,7 @@ func (b *bucket) insertEntry(key, val []byte, spare int) (int, bool) {
 		//  and push back to the queue
 		if offset, ok := b.q.Push(ent, 0); ok {
 			// update the offset
-			b.m[keyHash] = offset
+			b.m.Set(keyHash, offset)
 		} else {
 			panic("bucket.allocEntry: push entry failed")
 		}

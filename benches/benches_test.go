@@ -10,6 +10,7 @@ import (
 )
 
 func benchmarkGet(b *testing.B, c cache) {
+	defer c.close()
 	var (
 		key     = make([]byte, 8)
 		val     = make([]byte, 16)
@@ -31,6 +32,7 @@ func benchmarkGet(b *testing.B, c cache) {
 }
 
 func benchmarkParallelGet(b *testing.B, c cache) {
+	defer c.close()
 	var (
 		key     = make([]byte, 8)
 		val     = make([]byte, 16)
@@ -58,6 +60,7 @@ func benchmarkParallelGet(b *testing.B, c cache) {
 }
 
 func benchmarkSet(b *testing.B, c cache) {
+	defer c.close()
 	var (
 		key = make([]byte, 8)
 		val = make([]byte, 16)
@@ -72,6 +75,7 @@ func benchmarkSet(b *testing.B, c cache) {
 }
 
 func benchmarkParallelSet(b *testing.B, c cache) {
+	defer c.close()
 	const (
 		keyLen = 8
 		valLen = 16
@@ -93,6 +97,7 @@ func benchmarkParallelSet(b *testing.B, c cache) {
 }
 
 func benchmarkParallelSetGet(b *testing.B, c cache) {
+	defer c.close()
 	const (
 		keyLen = 8
 		valLen = 16
@@ -154,6 +159,7 @@ func BenchmarkParallelSetGet(b *testing.B) {
 }
 
 func testHitrate(t *testing.T, c cache, entries int) {
+	defer c.close()
 	var (
 		key    = make([]byte, 8)
 		val    = make([]byte, c.capacity()/entries-len(key))

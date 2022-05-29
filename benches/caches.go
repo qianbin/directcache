@@ -7,22 +7,25 @@ import (
 	"github.com/qianbin/directcache"
 )
 
-const capacity = 32 * 1024 * 1024
+const capacity = 64 * 1024 * 1024
 
 type cache interface {
 	get(key []byte) ([]byte, bool)
 	set(key, val []byte)
 	capacity() int
+	close()
 }
 
 type getFunc func(key []byte) ([]byte, bool)
 type setFunc func(key, val []byte)
 type capacityFunc func() int
+type closeFunc func()
 type nowFunc func() uint32
 
 func (f getFunc) get(key []byte) ([]byte, bool) { return f(key) }
 func (f setFunc) set(key, val []byte)           { f(key, val) }
 func (f capacityFunc) capacity() int            { return f() }
+func (f closeFunc) close()                      { f() }
 func (f nowFunc) Now() uint32                   { return f() }
 
 func newDirectCache() cache {
@@ -31,10 +34,12 @@ func newDirectCache() cache {
 		getFunc
 		setFunc
 		capacityFunc
+		closeFunc
 	}{
 		func(key []byte) ([]byte, bool) { return c.Get(key) },
 		func(key, val []byte) { c.Set(key, val) },
 		func() int { return c.Capacity() },
+		func() {},
 	}
 }
 
@@ -45,10 +50,12 @@ func newDirectCacheWithPolicy(shouldEvict func(entry directcache.Entry) bool) ca
 		getFunc
 		setFunc
 		capacityFunc
+		closeFunc
 	}{
 		func(key []byte) ([]byte, bool) { return c.Get(key) },
 		func(key, val []byte) { c.Set(key, val) },
 		func() int { return c.Capacity() },
+		func() {},
 	}
 }
 
@@ -62,6 +69,7 @@ func newFreeCache() cache {
 		getFunc
 		setFunc
 		capacityFunc
+		closeFunc
 	}{
 		func(key []byte) ([]byte, bool) {
 			val, err := c.Get(key)
@@ -69,6 +77,7 @@ func newFreeCache() cache {
 		},
 		func(key, val []byte) { c.Set(key, val, 0) },
 		func() int { return capacity },
+		func() { c.Clear() },
 	}
 }
 
@@ -78,10 +87,12 @@ func newFastCache() cache {
 		getFunc
 		setFunc
 		capacityFunc
+		closeFunc
 	}{
 		func(key []byte) ([]byte, bool) { return c.HasGet(nil, key) },
 		func(key, val []byte) { c.Set(key, val) },
 		func() int { return capacity },
+		func() { c.Reset() },
 	}
 }
 
@@ -94,6 +105,7 @@ func newBigCache() cache {
 		getFunc
 		setFunc
 		capacityFunc
+		closeFunc
 	}{
 		func(key []byte) ([]byte, bool) {
 			val, err := c.Get(string(key))
@@ -101,5 +113,6 @@ func newBigCache() cache {
 		},
 		func(key, val []byte) { c.Set(string(key), val) },
 		func() int { return capacity },
+		func() { c.Close() },
 	}
 }

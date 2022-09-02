@@ -13,7 +13,7 @@ func Test_entry(t *testing.T) {
 		val := "bar"
 
 		ent := make(entry, entrySize(len(key), len(val), len(val)))
-		ent.Init([]byte(key), []byte(val), len(val))
+		copy(ent.Init([]byte(key), len(val), len(val)), val)
 
 		require.Equal(t, entrySize(len(key), len(val), len(val)), ent.Size())
 		require.Equal(t, key, string(ent.Key()))
@@ -25,7 +25,7 @@ func Test_entry(t *testing.T) {
 		val := strings.Repeat("v", 1000)
 
 		ent := make(entry, entrySize(len(key), len(val), 0))
-		ent.Init([]byte(key), []byte(val), 0)
+		copy(ent.Init([]byte(key), len(val), 0), val)
 
 		require.Equal(t, key, string(ent.Key()))
 		require.Equal(t, val, string(ent.Value()))
@@ -36,7 +36,7 @@ func Test_entry(t *testing.T) {
 		val := strings.Repeat("v", 70000)
 
 		ent := make(entry, entrySize(len(key), len(val), 0))
-		ent.Init([]byte(key), []byte(val), 0)
+		copy(ent.Init([]byte(key), len(val), 0), val)
 
 		require.Equal(t, key, string(ent.Key()))
 		require.Equal(t, val, string(ent.Value()))
@@ -47,7 +47,7 @@ func Test_entry(t *testing.T) {
 		val := strings.Repeat("v", 10)
 
 		ent := make(entry, entrySize(len(key), len(val), 0))
-		ent.Init([]byte(key), []byte(val), 0)
+		copy(ent.Init([]byte(key), len(val), 0), val)
 
 		require.Equal(t, key, string(ent.Key()))
 		require.Equal(t, val, string(ent.Value()))
@@ -58,7 +58,7 @@ func Test_entry(t *testing.T) {
 		val := strings.Repeat("v", 1000)
 
 		ent := make(entry, entrySize(len(key), len(val), 0))
-		ent.Init([]byte(key), []byte(val), 0)
+		copy(ent.Init([]byte(key), len(val), 0), val)
 
 		require.Equal(t, key, string(ent.Key()))
 		require.Equal(t, val, string(ent.Value()))
@@ -69,7 +69,7 @@ func Test_entry(t *testing.T) {
 		val := strings.Repeat("v", 70000)
 
 		ent := make(entry, entrySize(len(key), len(val), 0))
-		ent.Init([]byte(key), []byte(val), 0)
+		copy(ent.Init([]byte(key), len(val), 0), val)
 
 		require.Equal(t, key, string(ent.Key()))
 		require.Equal(t, val, string(ent.Value()))
@@ -80,7 +80,7 @@ func Test_entry(t *testing.T) {
 		val := strings.Repeat("v", 10)
 
 		ent := make(entry, entrySize(len(key), len(val), 0))
-		ent.Init([]byte(key), []byte(val), 0)
+		copy(ent.Init([]byte(key), len(val), 0), val)
 
 		require.Equal(t, key, string(ent.Key()))
 		require.Equal(t, val, string(ent.Value()))
@@ -91,7 +91,7 @@ func Test_entry(t *testing.T) {
 		val := strings.Repeat("v", 1000)
 
 		ent := make(entry, entrySize(len(key), len(val), 0))
-		ent.Init([]byte(key), []byte(val), 0)
+		copy(ent.Init([]byte(key), len(val), 0), val)
 
 		require.Equal(t, key, string(ent.Key()))
 		require.Equal(t, val, string(ent.Value()))
@@ -102,7 +102,7 @@ func Test_entry(t *testing.T) {
 		val := strings.Repeat("v", 70000)
 
 		ent := make(entry, entrySize(len(key), len(val), 0))
-		ent.Init([]byte(key), []byte(val), 0)
+		copy(ent.Init([]byte(key), len(val), 0), val)
 
 		require.Equal(t, key, string(ent.Key()))
 		require.Equal(t, val, string(ent.Value()))
@@ -113,7 +113,7 @@ func Test_entry(t *testing.T) {
 		val := "bar"
 
 		ent := make(entry, entrySize(len(key), len(val), len(val)))
-		ent.Init([]byte(key), []byte(val), len(val))
+		copy(ent.Init([]byte(key), len(val), len(val)), val)
 
 		require.False(t, ent.HasFlag(deletedFlag))
 		ent.AddFlag(deletedFlag)

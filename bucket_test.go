@@ -18,7 +18,7 @@ func Test_bucket(t *testing.T) {
 	kh := xxhash.Sum64String(k)
 
 	// set
-	ok := bkt.Set([]byte(k), kh, []byte(v))
+	ok := bkt.Set([]byte(k), kh, len(v), func(val []byte) { copy(val, v) })
 	require.True(t, ok)
 
 	// get
@@ -39,14 +39,14 @@ func Test_bucket(t *testing.T) {
 	require.False(t, bkt.Del([]byte(k), kh), "deleted, re-delete should fail")
 
 	// in-place overwrite
-	bkt.Set([]byte(k), kh, []byte(v))
-	require.True(t, bkt.Set([]byte(k), kh, []byte(v)))
+	bkt.Set([]byte(k), kh, len(v), func(val []byte) { copy(val, v) })
+	require.True(t, bkt.Set([]byte(k), kh, len(v), func(val []byte) { copy(val, v) }))
 
 	// non-in-place overwrite
-	require.True(t, bkt.Set([]byte(k), kh, []byte(v+v)))
+	require.True(t, bkt.Set([]byte(k), kh, len(v)*2, func(val []byte) { copy(val, v+v) }))
 
 	// entry too large
-	require.False(t, bkt.Set([]byte(k), kh, make([]byte, bkt.q.Cap()+1)), "entry too large, should fail")
+	require.False(t, bkt.Set([]byte(k), kh, bkt.q.Cap()+1, func(val []byte) {}), "entry too large, should fail")
 
 	// buffer overflow
 	bkt.Reset(100)
@@ -54,7 +54,7 @@ func Test_bucket(t *testing.T) {
 		n := rand.Intn(bkt.q.Cap() / 2)
 		k := make([]byte, n)
 		rand.Read(k)
-		require.True(t, bkt.Set(k, xxhash.Sum64(k), nil))
+		require.True(t, bkt.Set(k, xxhash.Sum64(k), 0, func(val []byte) {}))
 		if i%2 == 0 {
 			bkt.Get(k, xxhash.Sum64(k), nil, false) // add recently-used flag
 		} else {
@@ -71,7 +71,7 @@ func Test_bucketDump(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		k := []byte{'k', byte(i)}
 		v := []byte{'v', byte(i)}
-		bkt.Set(k, xxhash.Sum64(k), v)
+		bkt.Set(k, xxhash.Sum64(k), len(v), func(val []byte) { copy(val, v) })
 		ser = append(ser, k...)
 		ser = append(ser, v...)
 	}
@@ -119,7 +119,7 @@ func Test_bucketHitrate(t *testing.T) {
 			hit++
 		} else {
 			miss++
-			bkt.Set(k, hash, nil)
+			bkt.Set(k, hash, 0, func(val []byte) {})
 		}
 	}
 	hitrate := float64(hit) / float64(hit+miss)

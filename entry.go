@@ -49,11 +49,11 @@ func (e entry) Key() []byte { return e[e.hdrSize():][:e.keyLen()] }
 // Value returns the value of the entry.
 func (e entry) Value() []byte { return e[e.hdrSize():][e.keyLen():][:e.valLen()] }
 
-// Init initializes the entry with key, val and spare.
+// Init initializes the entry and return the slice for value.
 //
 // The entry must be pre-alloced.
-func (e entry) Init(key []byte, val []byte, spare int) {
-	keyLen, valLen := len(key), len(val)
+func (e entry) Init(key []byte, valLen int, spare int) []byte {
+	keyLen := len(key)
 	lb := bitw(keyLen + valLen + spare)
 
 	// init header
@@ -66,7 +66,7 @@ func (e entry) Init(key []byte, val []byte, spare int) {
 	// init key and value
 	hdrSize := 1 + lw*3
 	copy(e[hdrSize:], key)
-	copy(e[hdrSize:][keyLen:], val)
+	return e[hdrSize:][keyLen:][:valLen]
 }
 
 func (e entry) intAt(i int, w int) int {

@@ -55,7 +55,9 @@ func (c *Cache) SetEvictionPolicy(shouldEvict func(entry Entry) bool) {
 // It's safe to modify contents of key and val after Set returns.
 func (c *Cache) Set(key, val []byte) bool {
 	keyHash := xxhash.Sum64(key)
-	return c.buckets[keyHash%BucketCount].Set(key, keyHash, val)
+	return c.buckets[keyHash%BucketCount].Set(key, keyHash, len(val), func(_val []byte) {
+		copy(_val, val)
+	})
 }
 
 // Del deletes the entry matching the given key from the cache.
@@ -96,6 +98,15 @@ func (c *Cache) Has(key []byte) bool {
 func (c *Cache) AdvGet(key []byte, fn func(val []byte), peek bool) bool {
 	keyHash := xxhash.Sum64(key)
 	return c.buckets[keyHash%BucketCount].Get(key, keyHash, fn, peek)
+}
+
+// AdvSet is the advanced version of Set. fn callback is for value assignment.
+// It always succeeds unless the size of the entry exceeds 1/BucketCount of the cache capacity.
+//
+// It's safe to modify contents of key after AdvSet returns.
+func (c *Cache) AdvSet(key []byte, valLen int, fn func(val []byte)) bool {
+	keyHash := xxhash.Sum64(key)
+	return c.buckets[keyHash%BucketCount].Set(key, keyHash, valLen, fn)
 }
 
 // Dump dumps all saved entires bucket by bucket in the order of insertion.

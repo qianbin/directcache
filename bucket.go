@@ -34,15 +34,15 @@ func (b *bucket) SetEvictionPolicy(shouldEvict func(entry Entry) bool) {
 }
 
 // Set set val for key.
-// false returned and nonting changed if the new entry size exceeds the capacity of this bucket.
-func (b *bucket) Set(key []byte, keyHash uint64, val []byte) bool {
+// false returned and nothing changed if the new entry size exceeds the capacity of this bucket.
+func (b *bucket) Set(key []byte, keyHash uint64, valLen int, fn func(val []byte)) bool {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
 	if offset, found := b.m.Get(keyHash); found {
 		ent := b.entryAt(offset)
-		if spare := ent.BodySize() - len(key) - len(val); spare >= 0 { // in-place update
-			ent.Init(key, val, spare)
+		if spare := ent.BodySize() - len(key) - valLen; spare >= 0 { // in-place update
+			fn(ent.Init(key, valLen, spare))
 			ent.AddFlag(recentlyUsedFlag) // avoid evicted too early
 			return true
 		}
@@ -50,7 +50,7 @@ func (b *bucket) Set(key []byte, keyHash uint64, val []byte) bool {
 		ent.AddFlag(deletedFlag)
 	}
 	// insert new entry
-	if offset, ok := b.insertEntry(key, val, 0); ok {
+	if offset, ok := b.insertEntry(key, valLen, 0, fn); ok {
 		b.m.Set(keyHash, offset)
 		return true
 	}
@@ -121,8 +121,8 @@ func (b *bucket) entryAt(offset int) entry {
 
 // insertEntry insert a new entry and returns its offset.
 // Old entries are evicted like LRU strategy if no enough space.
-func (b *bucket) insertEntry(key, val []byte, spare int) (int, bool) {
-	entrySize := entrySize(len(key), len(val), spare)
+func (b *bucket) insertEntry(key []byte, valLen int, spare int, fn func(val []byte)) (int, bool) {
+	entrySize := entrySize(len(key), valLen, spare)
 	if entrySize > b.q.Cap() {
 		return 0, false
 	}
@@ -131,7 +131,7 @@ func (b *bucket) insertEntry(key, val []byte, spare int) (int, bool) {
 	for {
 		// have a try
 		if offset, ok := b.q.Push(nil, entrySize); ok {
-			entry(b.q.Slice(offset)).Init(key, val, spare)
+			fn(entry(b.q.Slice(offset)).Init(key, valLen, spare))
 			return offset, true
 		}
 

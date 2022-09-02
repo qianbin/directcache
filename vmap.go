@@ -13,11 +13,11 @@ type vmap struct {
 
 func (v *vmap) Reset(maxv int) {
 	switch {
-	case int64(maxv) <= 1<<16-1:
+	case int64(maxv) < 1<<16:
 		v.m = make(map16)
-	case int64(maxv) <= 1<<24-1:
+	case int64(maxv) < 1<<24:
 		v.m = make(map24)
-	case int64(maxv) <= 1<<32-1:
+	case int64(maxv) < 1<<32:
 		v.m = make(map32)
 	default:
 		v.m = make(map64)

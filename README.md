@@ -50,6 +50,19 @@ c.AdvGet(
 )
 ```
 
+in-place value assignment
+
+```go
+c.AdvSet(
+    key,
+    len(val),
+    func(_val []byte) {
+        copy(_val, val) // in-place assign value
+    },
+)
+```
+
+
 custom eviction policy
 ```go
 shouldEvict := func(entry directcache.Entry) bool {

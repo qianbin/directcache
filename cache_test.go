@@ -47,13 +47,22 @@ func TestCache(t *testing.T) {
 	require.False(t, c.Del([]byte(k)))
 	require.False(t, c.Has([]byte(k)))
 
-	// advget
+	// advGet
 	c.Set([]byte(k), []byte(v))
 	got = got[:0]
 	require.True(t, c.AdvGet([]byte(k), func(val []byte) {
 		got = append(got, val...)
 	}, false))
 	require.Equal(t, v, string(got))
+
+	// advSet
+	advv := "advval"
+	require.True(t, c.AdvSet([]byte(k), len(advv), func(val []byte) {
+		copy(val, advv)
+	}))
+	got, ok = c.Get([]byte(k))
+	require.True(t, ok)
+	require.Equal(t, advv, string(got))
 }
 
 func TestCacheDump(t *testing.T) {
